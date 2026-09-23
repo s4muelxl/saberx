@@ -91,20 +91,151 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
     }
   };
 
-  // Carrega planilha modelo sintética rápida
+  // Carrega planilha modelo oficial SaberX com os 5 Pilares Corporativos
   const handleLoadDemoTemplate = () => {
     const ws_data = [
-      ['ITEM', 'CÓDIGO MPR', 'DESCRIÇÃO TÉCNICA', 'QTD. BARRAS', 'METROS', 'JD AÇO (QTD)', 'PESO', 'PREÇO', 'UNID', 'PAULISTEEL (QTD)', 'PESO', 'PREÇO', 'UNID', 'ROMEVA (QTD)', 'PESO', 'PREÇO', 'UNID'],
-      [1, 'MPR-CAI-1500-0188-1020', 'CANTONEIRA ABAS IGUAIS 1.1/2" x 3/16" - AISI 1020', 26.94, 161.64, 26.94, 451.71, 7.39, 'kg', 2, 33.52, 120, 'pç', 26.94, 451.71, 7.65, 'kg'],
-      [2, 'MPR-CAI-2000-0188-1020', 'CANTONEIRA ABAS IGUAIS 2" x 3/16" - AISI 1020', 30.90, 185.40, 30.90, 702.98, 7.42, 'kg', 30, 682.50, 7.30, 'kg', 30.90, 702.98, 7.55, 'kg'],
-      [3, 'MPR-TIR-1000-0400-0048-1020', 'TUBO INDUSTRIAL RETANGULAR 100,00 X 40,00 X 4,75', 10.00, 60.00, 10.00, 572.00, 7.95, 'kg', 0, 0, 0, 'kg', 10.00, 572.00, 7.75, 'kg']
+      ['SABERX - MAPA DE COTAÇÃO E COMPARATIVO DE PREÇOS (TCO PROCUREMENT)'],
+      ['Número da Cotação:', 'COT-2026-001'],
+      ['Projeto:', 'Plataforma de Acesso Industrial - Aço Carbono'],
+      ['Cliente Relacionado:', 'Metálicas Brasil S.A.'],
+      ['Responsável:', 'Comprador Técnico'],
+      ['Data:', '2026-09-23'],
+      ['Status:', 'EM_COTACAO'],
+      ['SUBTOTAL DINÂMICO (FILTRADO):'],
+      [
+        'Item',
+        'Código MPR',
+        'Descrição',
+        'Qtd. Barras',
+        'Qtd. Metros',
+        'JD Aço (Preço Bruto R$)',
+        'JD Aço (Frete Unit. R$)',
+        'JD Aço (Alíquota Imposto %)',
+        'JD Aço (Prazo Dias)',
+        'JD Aço (TCO Total R$)',
+        'Paulisteel (Preço Bruto R$)',
+        'Paulisteel (Frete Unit. R$)',
+        'Paulisteel (Alíquota Imposto %)',
+        'Paulisteel (Prazo Dias)',
+        'Paulisteel (TCO Total R$)',
+        'Romeva Tubos (Preço Bruto R$)',
+        'Romeva Tubos (Frete Unit. R$)',
+        'Romeva Tubos (Alíquota Imposto %)',
+        'Romeva Tubos (Prazo Dias)',
+        'Romeva Tubos (TCO Total R$)',
+        'Menor TCO (Vencedor R$)',
+        'Fornecedor Vencedor',
+        'Budget Unitário TCO (R$)',
+        'Status do Item',
+        'Saving Bruto (R$)',
+        '% Saving'
+      ],
+      [
+        1,
+        'MPR-CAI-1500-0188-1020',
+        'CANTONEIRA ABAS IGUAIS 1.1/2" x 3/16" - AISI 1020',
+        26.94,
+        161.64,
+        7.39,
+        45.0,
+        0.12,
+        10,
+        3425.80,
+        7.55,
+        30.0,
+        0.12,
+        14,
+        3470.15,
+        7.65,
+        50.0,
+        0.12,
+        12,
+        3540.20,
+        3425.80,
+        'JD Aço',
+        3700.00,
+        'APROVADO',
+        114.40,
+        0.032
+      ],
+      [
+        2,
+        'MPR-CAI-2000-0188-1020',
+        'CANTONEIRA ABAS IGUAIS 2" x 3/16" - AISI 1020',
+        30.90,
+        185.40,
+        7.42,
+        45.0,
+        0.12,
+        10,
+        5380.20,
+        7.30,
+        35.0,
+        0.12,
+        15,
+        5295.40,
+        7.55,
+        50.0,
+        0.12,
+        12,
+        5510.80,
+        5295.40,
+        'Paulisteel',
+        5600.00,
+        'APROVADO',
+        215.40,
+        0.039
+      ],
+      [
+        3,
+        'MPR-TIR-1000-0400-0048-1020',
+        'TUBO INDUSTRIAL RETANGULAR 100,00 X 40,00 X 4,75',
+        10.00,
+        60.00,
+        7.95,
+        60.0,
+        0.12,
+        10,
+        1795.00,
+        8.20,
+        40.0,
+        0.12,
+        16,
+        1840.00,
+        7.75,
+        55.0,
+        0.12,
+        11,
+        1750.50,
+        1750.50,
+        'Romeva Tubos',
+        1900.00,
+        'APROVADO',
+        89.50,
+        0.048
+      ]
     ];
+
     const ws = XLSX.utils.aoa_to_sheet(ws_data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Mapa_Cotacao');
+    XLSX.utils.book_append_sheet(wb, ws, 'SABERX_MAPA_COTACAO');
+
+    // Aba de BI Dashboard
+    const dash_data = [
+      ['SABERX - DASHBOARD EXECUTIVO DE SUPRIMENTOS (BI)'],
+      [],
+      ['INDICADOR EXECUTIVO (KPI)', 'VALOR', 'DESCRIÇÃO'],
+      ['1. TOTAL GASTO (TCO CONTRATADO)', 10471.70, 'Custo Total de Propriedade vencedor acumulado'],
+      ['2. TOTAL DE SAVING OBTIDO (R$)', 419.30, 'Economia monetária contra a pior proposta cotada'],
+      ['3. % SAVING MÉDIO CORPORATIVO', '3.85%', 'Eficiência média nas negociações'],
+      ['4. FORNECEDOR LÍDER', 'JD Aço', 'Parceiro com maior adjudicação']
+    ];
+    const wsDash = XLSX.utils.aoa_to_sheet(dash_data);
+    XLSX.utils.book_append_sheet(wb, wsDash, 'DASHBOARD_SABERX');
+
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const file = new File([blob], 'Mapa_Cotacao_Plataforma_Acesso_-_Aco_Carbono_ATUALIZADO.xlsx', { type: blob.type });
+    const file = new File([blob], 'SaberX_Mapa_Cotacao_Padrao_Corporativo.xlsx', { type: blob.type });
 
     handleFileUpload(file);
   };
@@ -241,13 +372,14 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
     const newQuotation: QuotationFull = {
       id: quotationId,
       organization_id: DEMO_ORG_ID,
-      quotation_number: `COT-IMP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
-      project_name: analysis.fileName.replace(/\.[^/.]+$/, '').replace(/_/g, ' '),
+      quotation_number: analysis.metadata?.quotation_number || `COT-IMP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      project_name: analysis.metadata?.project_name || analysis.fileName.replace(/\.[^/.]+$/, '').replace(/_/g, ' '),
+      related_client: analysis.metadata?.related_client || 'Metálicas Brasil S.A.',
       responsible_user_id: user?.id,
-      responsible_user_name: user?.full_name,
-      quotation_date: new Date().toISOString().split('T')[0],
-      notes: `Importado via Assistente Profissional SaberX (${processedRows.length} itens)`,
-      status: 'EM_COTACAO',
+      responsible_user_name: analysis.metadata?.responsible_user_name || user?.full_name || 'Comprador Técnico',
+      quotation_date: analysis.metadata?.quotation_date || new Date().toISOString().split('T')[0],
+      notes: `Importado via Assistente Corporativo SaberX com Matriz TCO (${processedRows.length} itens)`,
+      status: (analysis.metadata?.status as any) || 'EM_COTACAO',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       items,
@@ -388,6 +520,20 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
               O assistente detectou <strong>{analysis.headers.length} colunas</strong> no arquivo <strong>{analysis.fileName}</strong>.
             </span>
           </div>
+
+          {analysis.metadata && (analysis.metadata.quotation_number || analysis.metadata.project_name) && (
+            <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-2">
+              <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4" /> Metadados Corporativos Identificados (A1:B7):
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div><span className="text-slate-400">Cotação:</span> <strong className="text-white block">{analysis.metadata.quotation_number || 'N/A'}</strong></div>
+                <div><span className="text-slate-400">Projeto:</span> <strong className="text-white block">{analysis.metadata.project_name || 'N/A'}</strong></div>
+                <div><span className="text-slate-400">Cliente:</span> <strong className="text-white block">{analysis.metadata.related_client || 'N/A'}</strong></div>
+                <div><span className="text-slate-400">Responsável:</span> <strong className="text-white block">{analysis.metadata.responsible_user_name || 'N/A'}</strong></div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             {/* Código MPR */}
