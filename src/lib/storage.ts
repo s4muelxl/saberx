@@ -816,8 +816,10 @@ class LocalStorageManager {
     return this.getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
   }
 
-  getCurrentUser(): UserProfile {
-    return this.getItem<UserProfile>(STORAGE_KEYS.CURRENT_USER, INITIAL_USERS[0]);
+  getCurrentUser(): UserProfile | null {
+    // Retorna apenas se houver uma sessão salva explicitamente (login real)
+    // Nunca retorna usuário demo automaticamente
+    return this.getItem<UserProfile | null>(STORAGE_KEYS.CURRENT_USER, null);
   }
 
   setCurrentUser(user: UserProfile): void {

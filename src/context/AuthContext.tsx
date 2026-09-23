@@ -29,9 +29,15 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isDemo = !isSupabaseConfigured();
+
   const [user, setUser] = useState<UserProfile | null>(() => {
+    // Se Supabase configurado: nunca auto-loga, aguarda getSession()
+    // Se modo demo (sem Supabase): usa sessão salva no localStorage
+    if (isSupabaseConfigured()) return null;
     return localStore.getCurrentUser();
   });
+
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured());
 
   useEffect(() => {
     localStore.init();
@@ -42,6 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session?.user) {
           fetchAndSetUserProfile(session.user.id, session.user.email);
         }
+        setAuthReady(true);
       });
 
       // 2. Escuta mudanças de autenticação (Login, Logout, OAuth redirect)
@@ -252,6 +259,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isSupabaseConfigured()) {
       await supabase.auth.signOut().catch(() => {});
     }
+    // Limpa sessão salva — próximo acesso exige login
+    localStorage.removeItem('saberx_current_user');
     setUser(null);
   };
 
@@ -281,6 +290,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
   };
+
+  // Aguarda Supabase verificar sessão antes de renderizar a app
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-[#080d18] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <svg viewBox="0 0 80 80" className="w-14 h-14 animate-pulse" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="80" height="80" rx="16" fill="#0d1424"/>
+            <path d="M18 18 L62 62" stroke="#475569" strokeWidth="5" strokeLinecap="round"/>
+            <path d="M62 18 L18 62" stroke="#475569" strokeWidth="5" strokeLinecap="round"/>
+          </svg>
+          <p className="text-slate-600 text-xs tracking-widest font-semibold">SABERX</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider
