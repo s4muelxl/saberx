@@ -20,6 +20,7 @@ import { calculateLowestValidPrice, validateSupplierQuote } from '../../domain/v
 import { calculateSupplierSubtotal, calculateQuotationTotal } from '../../domain/calculations';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
 import { SupplierQuoteModal } from './SupplierQuoteModal';
 import { ManualOverrideModal } from './ManualOverrideModal';
 import { useAuth } from '../../context/AuthContext';
@@ -41,6 +42,9 @@ export const QuotationComparisonMatrix: React.FC<QuotationComparisonMatrixProps>
 }) => {
   const { user, role } = useAuth();
   const { success, error, info } = useNotification();
+
+  // Mobile supplier active tab state per quotation item
+  const [mobileSupplierByItem, setMobileSupplierByItem] = useState<Record<string, string>>({});
 
   // Modals state
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
@@ -273,8 +277,165 @@ export const QuotationComparisonMatrix: React.FC<QuotationComparisonMatrixProps>
         </div>
       </div>
 
-      {/* Tabela de Matriz Comparativa (Desktop Scroll Horizontal) */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden shadow-2xl backdrop-blur-sm">
+      {/* Mobile Compact Cards View (< 1024px) */}
+      <div className="block lg:hidden space-y-4">
+        {quotation.items.map((item, index) => {
+          const quoteItemsForThisProduct: SupplierQuoteItem[] = [];
+          quotation.supplier_quotes.forEach((sq) => {
+            const q = sq.items?.find((i) => i.quotation_item_id === item.id);
+            if (q) quoteItemsForThisProduct.push(q);
+          });
+          const analysis = calculateLowestValidPrice(quoteItemsForThisProduct, item);
+
+          // Fornecedor selecionado na aba deste item no mobile
+          const currentSupplierId =
+            mobileSupplierByItem[item.id] || quotation.supplier_quotes[0]?.supplier_id;
+          const currentSq = quotation.supplier_quotes.find((s) => s.supplier_id === currentSupplierId);
+          const currentQuoteItem = currentSq?.items?.find((i) => i.quotation_item_id === item.id);
+
+          return (
+            <Card key={`mob-${item.id}`} className="p-4 space-y-3 border-slate-800 bg-slate-900/90">
+              {/* Product Header */}
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-mono text-xs font-bold text-blue-400">
+                    #{index + 1} {item.product?.codigo_mpr}
+                  </div>
+                  <h4 className="text-sm font-bold text-white mt-0.5">{item.product?.description}</h4>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {item.quantity_bars} barras ({item.quantity_meters} m) • {item.estimated_weight_kg} kg
+                  </div>
+                </div>
+
+                {/* Lowest Price Badge Mobile */}
+                {analysis.hasValidQuotes && analysis.lowestValidTotal !== null ? (
+                  <div className="text-right shrink-0">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-[11px]">
+                      <Trophy className="w-3 h-3 text-emerald-400" />
+                      R$ {analysis.lowestValidTotal.toFixed(2)}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-[10px] text-slate-500 font-medium">Sem cotação válida</span>
+                )}
+              </div>
+
+              {/* Alerta de Menor Preço Desclassificado Mobile */}
+              {analysis.lowestInvalidAlert && (
+                <div className="p-2.5 rounded-lg bg-amber-950/40 border border-amber-500/40 text-[11px] text-amber-300 flex items-start gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-bold">Menor nominal descartado: R$ {analysis.lowestInvalidAlert.total.toFixed(2)}</strong>
+                    <span>{analysis.lowestInvalidAlert.reason}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Tabs dos Fornecedores Mobile */}
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Alternar Fornecedor:
+                </div>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {quotation.supplier_quotes.map((sq) => {
+                    const isSelected = sq.supplier_id === currentSupplierId;
+                    const sqItem = sq.items?.find((i) => i.quotation_item_id === item.id);
+                    const isWinner = sqItem && analysis.lowestValidSupplierQuoteItemId === sqItem.id;
+
+                    return (
+                      <button
+                        key={sq.id}
+                        onClick={() =>
+                          setMobileSupplierByItem({
+                            ...mobileSupplierByItem,
+                            [item.id]: sq.supplier_id,
+                          })
+                        }
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {isWinner && <Trophy className="w-3 h-3 text-emerald-400" />}
+                        <span>{sq.supplier?.trade_name || sq.supplier?.company_name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Dados do Fornecedor Selecionado */}
+              {currentSq && (
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-200">
+                      {currentSq.supplier?.trade_name}
+                    </span>
+                    {currentQuoteItem ? (
+                      <Badge status={currentQuoteItem.validation_status} size="sm" />
+                    ) : (
+                      <Badge status="NAO_COTADO" size="sm" />
+                    )}
+                  </div>
+
+                  {currentQuoteItem && currentQuoteItem.validation_status !== 'NAO_COTADO' ? (
+                    <div className="space-y-1 pt-1">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Cotado:</span>
+                        <span className="font-mono text-white">
+                          {currentQuoteItem.quoted_quantity} {currentQuoteItem.price_unit} ({currentQuoteItem.weight_kg} kg)
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Preço Unitário:</span>
+                        <span className="font-mono text-white">
+                          R$ {currentQuoteItem.unit_price.toFixed(2)}/{currentQuoteItem.price_unit}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold pt-1.5 border-t border-slate-800 text-sm">
+                        <span className="text-slate-200">Total:</span>
+                        <span className="text-emerald-400 font-mono font-extrabold">
+                          R$ {currentQuoteItem.calculated_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-2 text-slate-400 text-[11px] text-center">
+                      Este produto ainda não foi cotado por este fornecedor.
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      className="flex-1"
+                      icon={<Edit3 className="w-3.5 h-3.5" />}
+                      onClick={() => handleOpenQuoteModal(item, currentSq)}
+                    >
+                      {currentQuoteItem ? 'Editar Preço' : '+ Lançar Cotação'}
+                    </Button>
+                    {currentQuoteItem && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        icon={<Sliders className="w-3.5 h-3.5" />}
+                        onClick={() => handleOpenOverrideModal(item, currentSq, currentQuoteItem)}
+                      >
+                        Ajuste
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Tabela de Matriz Comparativa (Desktop Scroll Horizontal >= 1024px) */}
+      <div className="hidden lg:block rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden shadow-2xl backdrop-blur-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>

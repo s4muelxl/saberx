@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Menu, Database, Shield, LogOut, ChevronDown, Check, User, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { UserRole } from '../../types/database';
+import { UserProfileModal } from './UserProfileModal';
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -10,6 +11,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
   const { user, role, switchUserRole, logout, isDemoMode } = useAuth();
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   const rolesList: { role: UserRole; label: string; desc: string }[] = [
     { role: 'ADMIN', label: 'Administrador', desc: 'Acesso total a todas as áreas' },
@@ -96,13 +98,19 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
 
         {/* User Avatar & Logout */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-slate-700 to-slate-600 flex items-center justify-center text-xs font-bold text-white border border-slate-600">
-            {user?.full_name ? user.full_name.charAt(0) : <User className="w-4 h-4" />}
-          </div>
-          <div className="hidden xl:block text-left text-xs">
-            <div className="font-semibold text-slate-200 truncate max-w-[120px]">{user?.full_name}</div>
-            <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{user?.email}</div>
-          </div>
+          <button
+            onClick={() => setProfileModalOpen(true)}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity text-left p-1 rounded-lg hover:bg-slate-800"
+            title="Ver e editar meu perfil"
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white border border-blue-400/30 shadow">
+              {user?.full_name ? user.full_name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
+            </div>
+            <div className="hidden xl:block text-left text-xs">
+              <div className="font-semibold text-slate-200 truncate max-w-[120px]">{user?.full_name}</div>
+              <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{user?.email}</div>
+            </div>
+          </button>
           <button
             onClick={() => logout()}
             title="Sair do sistema"
@@ -112,6 +120,11 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
           </button>
         </div>
       </div>
+
+      <UserProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+      />
     </header>
   );
 };

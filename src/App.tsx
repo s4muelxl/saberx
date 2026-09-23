@@ -21,6 +21,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { UsersPage } from './pages/UsersPage';
 import { localStore, DEMO_ORG_ID } from './lib/storage';
 import { PurchaseOrder } from './types/purchase';
+import { PwaInstallPrompt } from './components/pwa/PwaInstallPrompt';
 
 const MainApp: React.FC = () => {
   const { isAuthenticated } = useAuth();
@@ -167,6 +168,7 @@ export function App() {
       <SettingsProvider>
         <NotificationProvider>
           <MainApp />
+          <PwaInstallPrompt />
         </NotificationProvider>
       </SettingsProvider>
     </AuthProvider>
