@@ -86,16 +86,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }`}
       >
         {/* Brand Header */}
-        <div className="flex items-center gap-3 px-6 h-16 border-b border-slate-800/80">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/25">
-            <Layers className="w-5 h-5 text-white" />
-          </div>
+        <div className="flex items-center gap-3 px-5 h-16 border-b border-slate-800/80">
+          {/* Logo SaberX SVG */}
+          <svg viewBox="0 0 48 48" className="w-9 h-9 shrink-0" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="48" height="48" rx="10" fill="#0f172a"/>
+            <path d="M9 9 L24 24 L39 9 M9 9 L24 24 L9 39 M39 9 L24 24 L39 39 M9 39 L24 24 L39 39" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M9 9 L39 39 M39 9 L9 39" stroke="#e2e8f0" strokeWidth="3.5" strokeLinecap="round"/>
+          </svg>
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-white text-lg tracking-tight">SABER<span className="text-blue-500">X</span></span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 font-bold border border-blue-500/20">PRO</span>
+            <div className="flex items-center">
+              <span className="font-extrabold text-white text-[17px] tracking-widest">SABERX</span>
             </div>
-            <p className="text-[10px] text-slate-400 font-medium">Cotação & Compras Metal</p>
+            <p className="text-[10px] text-slate-500 font-medium tracking-wide">Cotação & Compras Metal</p>
           </div>
         </div>
 
@@ -140,15 +142,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </div>
 
-        {/* Plan / Footer info */}
-        <div className="p-4 border-t border-slate-800/80 bg-slate-900/40">
-          <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-xl">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-200">Plano Gratuito R$0</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-1">Supabase + Vercel operando 100% dentro da cota free.</p>
-          </div>
+        {/* Footer simples sem plano */}
+        <div className="p-4 border-t border-slate-800/60">
+          <p className="text-[10px] text-slate-600 text-center">SaberX © {new Date().getFullYear()}</p>
         </div>
       </aside>
     </>

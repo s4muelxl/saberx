@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import {
-  Layers,
   Shield,
   Mail,
   Lock,
   ArrowRight,
-  Database,
-  Building,
   User,
+  Building,
   Briefcase,
   CheckCircle2,
   AlertCircle
@@ -20,13 +18,13 @@ import { useNotification } from '../context/NotificationContext';
 import { evaluatePasswordStrength, sanitizeString } from '../lib/security';
 
 export const AuthPage: React.FC = () => {
-  const { login, signUp, loginWithGoogle, resetPassword, isDemoMode } = useAuth();
+  const { login, signUp, loginWithGoogle, resetPassword } = useAuth();
   const { success, error } = useNotification();
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [loading, setLoading] = useState(false);
 
-  // Form Fields
+  // Form fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -40,7 +38,7 @@ export const AuthPage: React.FC = () => {
     e.preventDefault();
 
     if (!email.trim()) {
-      error('Por favor, informe seu e-mail corporativo.');
+      error('Informe seu e-mail para continuar.');
       return;
     }
 
@@ -50,19 +48,19 @@ export const AuthPage: React.FC = () => {
       const res = await login(sanitizeString(email), password);
       setLoading(false);
       if (res.success) {
-        success('Login efetuado com sucesso!', 'Bem-vindo ao SaberX.');
+        success('Acesso autorizado!', 'Bem-vindo ao SaberX.');
       } else {
-        error('Falha na autenticação', res.error || 'Credenciais inválidas.');
+        error('Falha na autenticação', res.error || 'E-mail ou senha incorretos.');
       }
     } else if (mode === 'signup') {
       if (!fullName.trim() || !companyName.trim()) {
         setLoading(false);
-        error('Preencha seu nome e a razão social da empresa.');
+        error('Preencha seu nome e a empresa.');
         return;
       }
       if (password.length < 6) {
         setLoading(false);
-        error('A senha deve conter no mínimo 6 caracteres.');
+        error('A senha deve ter no mínimo 6 caracteres.');
         return;
       }
 
@@ -75,7 +73,7 @@ export const AuthPage: React.FC = () => {
       });
       setLoading(false);
       if (res.success) {
-        success('Conta criada com sucesso!', 'Você já está conectado.');
+        success('Conta criada!', 'Você já pode acessar o sistema.');
       } else {
         error('Não foi possível criar a conta', res.error);
       }
@@ -83,7 +81,7 @@ export const AuthPage: React.FC = () => {
       const res = await resetPassword(sanitizeString(email));
       setLoading(false);
       if (res.success) {
-        success('E-mail enviado!', 'Instruções de redefinição foram enviadas para seu e-mail.');
+        success('E-mail enviado!', 'Verifique sua caixa de entrada.');
         setMode('signin');
       } else {
         error('Erro ao solicitar redefinição', res.error);
@@ -95,128 +93,109 @@ export const AuthPage: React.FC = () => {
     try {
       setLoading(true);
       await loginWithGoogle();
-      success('Conectando via Google...', 'Aguarde o redirecionamento seguro.');
     } catch (err: any) {
       error('Erro ao conectar com Google', err.message);
-    } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickDemo = async (demoEmail: string) => {
-    setEmail(demoEmail);
-    setLoading(true);
-    await login(demoEmail);
-    setLoading(false);
-    success(`Conectado como ${demoEmail.split('@')[0].toUpperCase()}!`);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4 relative overflow-hidden">
-      {/* Background glow effects */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-[#080d18] flex flex-col justify-center items-center p-4 relative overflow-hidden">
+      {/* Subtle background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#0d1424] via-[#080d18] to-[#0a0f1e]" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-blue-900/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="w-full max-w-md relative z-10 space-y-6">
-        {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 items-center justify-center text-white shadow-xl shadow-blue-500/25 mb-1">
-            <Layers className="w-8 h-8 text-white" />
+      <div className="w-full max-w-[400px] relative z-10 space-y-5">
+
+        {/* Logo e nome */}
+        <div className="flex flex-col items-center gap-3 mb-2">
+          {/* Logo SaberX - estilo cruzado premium */}
+          <div className="relative">
+            <svg viewBox="0 0 80 80" className="w-16 h-16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="80" height="80" rx="16" fill="#0d1424"/>
+              <rect width="80" height="80" rx="16" fill="url(#logoGrad)" fillOpacity="0.15"/>
+              {/* Cruz diagonal estilizada */}
+              <path d="M18 18 L62 62" stroke="#cbd5e1" strokeWidth="5" strokeLinecap="round"/>
+              <path d="M62 18 L18 62" stroke="#cbd5e1" strokeWidth="5" strokeLinecap="round"/>
+              {/* Diagonais laterais formando X*/}
+              <path d="M18 18 L40 40 L18 62" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              <path d="M62 18 L40 40 L62 62" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              <defs>
+                <linearGradient id="logoGrad" x1="0" y1="0" x2="80" y2="80">
+                  <stop offset="0%" stopColor="#3b82f6"/>
+                  <stop offset="100%" stopColor="#6366f1"/>
+                </linearGradient>
+              </defs>
+            </svg>
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">
-            SABER<span className="text-blue-500">X</span>
-          </h1>
-          <p className="text-xs text-slate-400">
-            Plataforma Corporativa de Cotações, Compras & Engenharia de Preços
-          </p>
+          <div className="text-center">
+            <h1 className="text-[26px] font-black text-white tracking-[0.18em]">SABERX</h1>
+            <p className="text-[11px] text-slate-500 tracking-wider mt-0.5">SISTEMA DE COTAÇÃO & COMPRAS</p>
+          </div>
         </div>
 
-        {/* Tabs Switcher */}
-        <div className="flex bg-slate-900 border border-slate-800 rounded-xl p-1 gap-1 text-xs">
-          <button
-            type="button"
-            onClick={() => setMode('signin')}
-            className={`flex-1 py-2 font-bold rounded-lg transition-all ${
-              mode === 'signin' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Acessar Conta
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('signup')}
-            className={`flex-1 py-2 font-bold rounded-lg transition-all ${
-              mode === 'signup' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Criar Conta
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('forgot')}
-            className={`flex-1 py-2 font-bold rounded-lg transition-all ${
-              mode === 'forgot' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Recuperar
-          </button>
+        {/* Tabs */}
+        <div className="flex bg-slate-900/80 border border-slate-800/80 rounded-xl p-1 gap-1 text-xs">
+          {(['signin', 'signup', 'forgot'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={`flex-1 py-2 font-semibold rounded-lg transition-all ${
+                mode === m
+                  ? 'bg-slate-700/80 text-white shadow'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {m === 'signin' ? 'Entrar' : m === 'signup' ? 'Criar Conta' : 'Recuperar'}
+            </button>
+          ))}
         </div>
 
-        {/* Main Form Card */}
-        <Card className="p-6 border-slate-800 shadow-2xl">
-          {/* Google OAuth Button */}
+        {/* Card do formulário */}
+        <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-sm">
+
+          {/* Google OAuth - apenas login e cadastro */}
           {mode !== 'forgot' && (
-            <div className="mb-4">
+            <div className="mb-5">
               <button
                 type="button"
                 onClick={handleGoogleLogin}
-                className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow hover:border-slate-500 active:scale-[0.99] cursor-pointer"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-700/80 bg-slate-800/50 hover:bg-slate-800 text-white text-[13px] font-semibold transition-all hover:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.68-5.17 3.68-9.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.26v3.09C3.26 21.36 7.37 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.61H1.26C.46 8.23 0 10.06 0 12s.46 3.77 1.26 5.39l4.01-3.1z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.64 1.26 6.61l4.01 3.1c.95-2.85 3.6-4.96 6.73-4.96z"
-                  />
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.68-5.17 3.68-9.09z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.26v3.09C3.26 21.36 7.37 24 12 24z"/>
+                  <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.61H1.26C.46 8.23 0 10.06 0 12s.46 3.77 1.26 5.39l4.01-3.1z"/>
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.64 1.26 6.61l4.01 3.1c.95-2.85 3.6-4.96 6.73-4.96z"/>
                 </svg>
                 <span>Continuar com o Google</span>
               </button>
 
-              <div className="relative my-4 flex items-center justify-center">
-                <div className="border-t border-slate-800 w-full" />
-                <span className="bg-slate-900 px-3 text-[10px] text-slate-500 font-semibold uppercase tracking-wider absolute">
-                  ou use e-mail corporativo
-                </span>
+              <div className="relative my-4 flex items-center">
+                <div className="flex-1 border-t border-slate-800" />
+                <span className="px-3 text-[10px] text-slate-600 font-semibold uppercase tracking-widest shrink-0">ou</span>
+                <div className="flex-1 border-t border-slate-800" />
               </div>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
-            {/* Campos adicionais para Cadastro (Sign Up) */}
+            {/* Campos extras para cadastro */}
             {mode === 'signup' && (
               <>
                 <Input
-                  label="Nome Completo *"
-                  placeholder="Carlos Alberto Santos"
+                  label="Nome Completo"
+                  placeholder="Seu nome"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   leftIcon={<User className="w-4 h-4" />}
                   required
                 />
                 <Input
-                  label="Empresa / Razão Social *"
-                  placeholder="Mineração & Aço S.A."
+                  label="Empresa / Razão Social"
+                  placeholder="Nome da empresa"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   leftIcon={<Building className="w-4 h-4" />}
@@ -225,7 +204,7 @@ export const AuthPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2">
                   <Input
                     label="Cargo"
-                    placeholder="Comprador Sênior"
+                    placeholder="Comprador"
                     value={position}
                     onChange={(e) => setPosition(e.target.value)}
                     leftIcon={<Briefcase className="w-4 h-4" />}
@@ -241,9 +220,9 @@ export const AuthPage: React.FC = () => {
             )}
 
             <Input
-              label="E-mail Corporativo *"
+              label="E-mail"
               type="email"
-              placeholder="seu.email@empresa.com.br"
+              placeholder="seu@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               leftIcon={<Mail className="w-4 h-4" />}
@@ -253,7 +232,7 @@ export const AuthPage: React.FC = () => {
             {mode !== 'forgot' && (
               <div>
                 <Input
-                  label="Senha de Acesso *"
+                  label="Senha"
                   type="password"
                   placeholder="••••••••"
                   value={password}
@@ -261,21 +240,20 @@ export const AuthPage: React.FC = () => {
                   leftIcon={<Lock className="w-4 h-4" />}
                   required
                 />
-
-                {/* Password Strength Meter no Cadastro */}
+                {/* Medidor de força da senha no cadastro */}
                 {mode === 'signup' && password.length > 0 && (
                   <div className="mt-2 space-y-1">
                     <div className="flex justify-between text-[10px]">
-                      <span className="text-slate-400">Segurança da Senha:</span>
-                      <span style={{ color: passwordStrength.color }} className="font-bold">
+                      <span className="text-slate-500">Segurança:</span>
+                      <span style={{ color: passwordStrength.color }} className="font-semibold">
                         {passwordStrength.label}
                       </span>
                     </div>
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden flex gap-1">
+                    <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden flex gap-0.5">
                       {[1, 2, 3, 4].map((step) => (
                         <div
                           key={step}
-                          className="h-full flex-1 transition-all rounded-full"
+                          className="h-full flex-1 rounded-full transition-all"
                           style={{
                             backgroundColor: step <= passwordStrength.score ? passwordStrength.color : '#1e293b'
                           }}
@@ -290,60 +268,21 @@ export const AuthPage: React.FC = () => {
             <Button
               type="submit"
               variant="primary"
-              className="w-full mt-2"
+              className="w-full mt-3"
               loading={loading}
               icon={<ArrowRight className="w-4 h-4" />}
             >
-              {mode === 'signin' && 'Acessar Plataforma'}
-              {mode === 'signup' && 'Criar Conta e Organização'}
-              {mode === 'forgot' && 'Enviar Link de Redefinição'}
+              {mode === 'signin' && 'Acessar'}
+              {mode === 'signup' && 'Criar conta'}
+              {mode === 'forgot' && 'Enviar link'}
             </Button>
           </form>
+        </div>
 
-          {/* Quick Demo Access Buttons */}
-          <div className="mt-5 pt-4 border-t border-slate-800/80">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-2.5">
-              <span className="font-semibold text-slate-300">Acesso Rápido de Teste (Demo):</span>
-              <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-mono">
-                <Database className="w-3 h-3" /> Supabase Ativo
-              </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('admin@demo.local')}
-                className="p-2 rounded-lg bg-slate-900 border border-slate-700/80 hover:border-blue-500 text-left transition-all group"
-              >
-                <div className="text-[11px] font-bold text-white group-hover:text-blue-400">Admin</div>
-                <div className="text-[9px] text-slate-400">Diretoria</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('compras@demo.local')}
-                className="p-2 rounded-lg bg-slate-900 border border-slate-700/80 hover:border-blue-500 text-left transition-all group"
-              >
-                <div className="text-[11px] font-bold text-white group-hover:text-blue-400">Compras</div>
-                <div className="text-[9px] text-slate-400">Cotações</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('vendas@demo.local')}
-                className="p-2 rounded-lg bg-slate-900 border border-slate-700/80 hover:border-blue-500 text-left transition-all group"
-              >
-                <div className="text-[11px] font-bold text-white group-hover:text-blue-400">Vendas</div>
-                <div className="text-[9px] text-slate-400">Orçamentos</div>
-              </button>
-            </div>
-          </div>
-        </Card>
-
-        {/* Security badge footer */}
-        <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500">
-          <Shield className="w-3.5 h-3.5 text-blue-500" />
-          <span>Isolamento seguro de dados multi-tenant via Supabase RLS & Criptografia TLS 1.3</span>
+        {/* Rodapé de segurança */}
+        <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-600">
+          <Shield className="w-3 h-3" />
+          <span>Acesso protegido · Supabase RLS · TLS 1.3</span>
         </div>
       </div>
     </div>
