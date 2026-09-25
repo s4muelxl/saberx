@@ -104,9 +104,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
-    if (isSupabaseConfigured() && password) {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (isSupabaseConfigured()) {
+      if (!password) {
+        return { success: false, error: 'A senha é obrigatória.' };
+      }
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password
+        });
         if (error) {
           return { success: false, error: error.message };
         }
@@ -114,14 +122,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await fetchAndSetUserProfile(data.user.id, data.user.email);
           return { success: true };
         }
+        return { success: false, error: 'Não foi possível autenticar o usuário.' };
       } catch (err: any) {
         return { success: false, error: err.message || 'Erro de conexão com o Supabase' };
       }
     }
 
     // Modo Demonstração / Local
+    if (!password) {
+      return { success: false, error: 'A senha é obrigatória.' };
+    }
+
     const users = localStore.getUsers();
-    const found = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    const found = users.find((u) => u.email.toLowerCase() === cleanEmail);
     if (found) {
       setUser(found);
       localStore.setCurrentUser(found);
@@ -131,9 +144,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newUser: UserProfile = {
       id: `usr-${Date.now()}`,
       organization_id: DEMO_ORG_ID,
-      full_name: email.split('@')[0].toUpperCase(),
-      email,
-      role: email.includes('admin') ? 'ADMIN' : email.includes('vendas') ? 'VENDAS' : 'COMPRAS',
+      full_name: cleanEmail.split('@')[0].toUpperCase(),
+      email: cleanEmail,
+      role: cleanEmail.includes('admin') ? 'ADMIN' : cleanEmail.includes('vendas') ? 'VENDAS' : 'COMPRAS',
       is_active: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()

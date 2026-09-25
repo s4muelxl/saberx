@@ -18,7 +18,7 @@ export const Input: React.FC<InputProps> = ({
   id,
   ...props
 }) => {
-  const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+  const inputId = id || (label ? label.toLowerCase().replace(/[^a-z0-9_-]/g, '-') : undefined);
 
   return (
     <div className="w-full">

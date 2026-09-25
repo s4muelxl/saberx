@@ -10,6 +10,9 @@ export interface CalculationSettings {
  * Arredonda para 2 casas decimais com precisão monetária
  */
 export function round2(value: number): number {
+  if (typeof value !== 'number' || !isFinite(value) || isNaN(value)) {
+    return 0;
+  }
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
@@ -30,19 +33,23 @@ export function calculateQuotationTotal(
   icmsPercent: number = 0,
   settings: CalculationSettings = { include_ipi_in_total: false, include_icms_in_total: false }
 ): number {
-  if (!unitPrice || unitPrice <= 0) {
+  const safeQty = Math.max(0, isFinite(quotedQuantity) ? quotedQuantity : 0);
+  const safeWeight = Math.max(0, isFinite(weightKg) ? weightKg : 0);
+  const safePrice = Math.max(0, isFinite(unitPrice) ? unitPrice : 0);
+
+  if (safePrice <= 0) {
     return 0;
   }
 
   let baseTotal = 0;
-  const unit = priceUnit.toLowerCase().trim();
+  const unit = (priceUnit || '').toLowerCase().trim();
 
   switch (unit) {
     case 'kg':
-      baseTotal = weightKg * unitPrice;
+      baseTotal = safeWeight * safePrice;
       break;
     case 'tonelada':
-      baseTotal = (weightKg / 1000) * unitPrice;
+      baseTotal = (safeWeight / 1000) * safePrice;
       break;
     case 'pç':
     case 'pc':
@@ -52,18 +59,21 @@ export function calculateQuotationTotal(
     case 'metro':
     case 'unidade':
     default:
-      baseTotal = quotedQuantity * unitPrice;
+      baseTotal = safeQty * safePrice;
       break;
   }
 
   let finalTotal = baseTotal;
 
-  if (settings.include_ipi_in_total && ipiPercent > 0) {
-    finalTotal += baseTotal * (ipiPercent / 100);
+  const safeIpi = Math.max(0, isFinite(ipiPercent) ? ipiPercent : 0);
+  const safeIcms = Math.max(0, isFinite(icmsPercent) ? icmsPercent : 0);
+
+  if (settings.include_ipi_in_total && safeIpi > 0) {
+    finalTotal += baseTotal * (safeIpi / 100);
   }
 
-  if (settings.include_icms_in_total && icmsPercent > 0) {
-    finalTotal += baseTotal * (icmsPercent / 100);
+  if (settings.include_icms_in_total && safeIcms > 0) {
+    finalTotal += baseTotal * (safeIcms / 100);
   }
 
   return round2(finalTotal);
@@ -74,8 +84,10 @@ export function calculateQuotationTotal(
  * Soma os totais de todos os itens cotados pelo fornecedor
  */
 export function calculateSupplierSubtotal(quoteItems: SupplierQuoteItem[]): number {
+  if (!Array.isArray(quoteItems)) return 0;
   const sum = quoteItems.reduce((acc, item) => {
-    return acc + (item.calculated_total || 0);
+    const total = isFinite(item.calculated_total) ? item.calculated_total : 0;
+    return acc + (total || 0);
   }, 0);
   return round2(sum);
 }
@@ -86,8 +98,11 @@ export function calculateSupplierSubtotal(quoteItems: SupplierQuoteItem[]): numb
  * Margem % = (Lucro / Preço de Venda) * 100
  */
 export function calculateProfitMargin(cost: number, salePrice: number): { profit: number; marginPercent: number } {
-  const profit = round2(salePrice - cost);
-  const marginPercent = salePrice > 0 ? round2((profit / salePrice) * 100) : 0;
+  const safeCost = Math.max(0, isFinite(cost) ? cost : 0);
+  const safeSale = Math.max(0, isFinite(salePrice) ? salePrice : 0);
+
+  const profit = round2(safeSale - safeCost);
+  const marginPercent = safeSale > 0 ? round2((profit / safeSale) * 100) : 0;
   return { profit, marginPercent };
 }
 
@@ -99,10 +114,13 @@ export function calculateSavings(
   referencePriceOrMaxValid: number,
   lowestValidPrice: number
 ): { savingsAmount: number; savingsPercent: number } {
-  if (!lowestValidPrice || lowestValidPrice <= 0 || referencePriceOrMaxValid <= lowestValidPrice) {
+  const safeRef = isFinite(referencePriceOrMaxValid) ? referencePriceOrMaxValid : 0;
+  const safeLowest = isFinite(lowestValidPrice) ? lowestValidPrice : 0;
+
+  if (safeLowest <= 0 || safeRef <= safeLowest) {
     return { savingsAmount: 0, savingsPercent: 0 };
   }
-  const savingsAmount = round2(referencePriceOrMaxValid - lowestValidPrice);
-  const savingsPercent = round2((savingsAmount / referencePriceOrMaxValid) * 100);
+  const savingsAmount = round2(safeRef - safeLowest);
+  const savingsPercent = round2((savingsAmount / safeRef) * 100);
   return { savingsAmount, savingsPercent };
 }

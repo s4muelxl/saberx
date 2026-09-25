@@ -14,6 +14,76 @@ export function sanitizeString(input: string): string {
 }
 
 /**
+ * Validação estrita de formato de e-mail corporativo (RFC 5322)
+ * Bloqueia entradas sem @ (ex: samuel8877alves.gmail.com), domínios incompletos (samuel@.com) ou TLDs inválidos (samuel@com)
+ */
+export function isValidEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') return false;
+  const trimmed = email.trim();
+  if (trimmed.length < 5 || trimmed.length > 254) return false;
+
+  // Regex robusto que exige:
+  // 1. Nome de usuário válido sem espaços ou caracteres de controle
+  // 2. Um único '@'
+  // 3. Domínio composto por letras/números/hífens
+  // 4. Ao menos um ponto com TLD de 2 ou mais letras
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+  if (!emailRegex.test(trimmed)) return false;
+
+  const parts = trimmed.split('@');
+  if (parts.length !== 2) return false;
+
+  const domain = parts[1];
+  if (domain.startsWith('.') || domain.endsWith('.') || domain.includes('..')) return false;
+
+  const domainParts = domain.split('.');
+  if (domainParts.length < 2) return false;
+  if (domainParts.some(p => p.length === 0)) return false;
+
+  const tld = domainParts[domainParts.length - 1];
+  if (tld.length < 2) return false;
+
+  return true;
+}
+
+/**
+ * Normaliza e-mail corporativo cortando espaços e convertendo para minúsculas
+ */
+export function normalizeEmail(email: string): string {
+  if (!email || typeof email !== 'string') return '';
+  return email.trim().toLowerCase();
+}
+
+/**
+ * Converte erros técnicos de banco/API (PostgrestError, network, etc.) em mensagens amigáveis
+ */
+export function formatFriendlyErrorMessage(err: any): string {
+  if (!err) return 'Ocorreu um erro inesperado. Tente novamente.';
+  const msg = typeof err === 'string' ? err : err.message || err.error_description || String(err);
+
+  if (msg.includes('Invalid login credentials') || msg.includes('invalid_grant')) {
+    return 'E-mail ou senha incorretos. Verifique suas credenciais.';
+  }
+  if (msg.includes('Email not confirmed')) {
+    return 'E-mail ainda não confirmado. Verifique sua caixa de entrada.';
+  }
+  if (msg.includes('User already registered') || msg.includes('already exists')) {
+    return 'Este endereço de e-mail já está cadastrado no sistema.';
+  }
+  if (msg.includes('Password should be at least')) {
+    return 'A senha deve conter no mínimo 6 caracteres.';
+  }
+  if (msg.includes('NetworkError') || msg.includes('Failed to fetch') || msg.includes('timeout')) {
+    return 'Falha na conexão com o servidor. Verifique sua internet ou tente mais tarde.';
+  }
+  if (msg.includes('PostgrestError') || msg.includes('relation') || msg.includes('violates') || msg.includes('column')) {
+    return 'Não foi possível concluir a operação no banco de dados. Tente novamente mais tarde.';
+  }
+
+  return msg;
+}
+
+/**
  * Converte com precisão formatos numéricos brasileiros e internacionais para float seguro
  * Ex: "R$ 3.338,14" -> 3338.14
  * Ex: "451,71" -> 451.71

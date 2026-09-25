@@ -24,6 +24,7 @@ export const ProductsPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(() => localStore.getProducts());
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('TODAS');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -111,6 +112,8 @@ export const ProductsPage: React.FC = () => {
   };
 
   const handleSave = () => {
+    if (isSubmitting) return;
+
     if (!formData.codigo_mpr.trim()) {
       error('O Código MPR é obrigatório.');
       return;
@@ -132,45 +135,55 @@ export const ProductsPage: React.FC = () => {
       return;
     }
 
-    if (editingProduct) {
-      const updated = localStore.saveProduct({
-        ...editingProduct,
-        ...formData,
-      });
-      localStore.logAudit({
-        organization_id: DEMO_ORG_ID,
-        user_id: user?.id,
-        user_name: user?.full_name,
-        action: 'PRODUTO_ATUALIZADO',
-        entity: 'products',
-        entity_id: editingProduct.id,
-        new_data: updated as any,
-        reason: 'Edição cadastral de especificações'
-      });
-      success('Produto atualizado com sucesso!');
-    } else {
-      const created = localStore.saveProduct({
-        id: `prod-${Date.now()}`,
-        organization_id: DEMO_ORG_ID,
-        ...formData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-      localStore.logAudit({
-        organization_id: DEMO_ORG_ID,
-        user_id: user?.id,
-        user_name: user?.full_name,
-        action: 'PRODUTO_CRIADO',
-        entity: 'products',
-        entity_id: created.id,
-        new_data: created as any,
-        reason: 'Cadastro de novo produto'
-      });
-      success('Produto cadastrado com sucesso!');
-    }
+    setIsSubmitting(true);
 
-    setProducts(localStore.getProducts());
-    setModalOpen(false);
+    try {
+      if (editingProduct) {
+        const updated = localStore.saveProduct({
+          ...editingProduct,
+          ...formData,
+          codigo_mpr: formData.codigo_mpr.trim(),
+          description: formData.description.trim(),
+        });
+        localStore.logAudit({
+          organization_id: DEMO_ORG_ID,
+          user_id: user?.id,
+          user_name: user?.full_name,
+          action: 'PRODUTO_ATUALIZADO',
+          entity: 'products',
+          entity_id: editingProduct.id,
+          new_data: updated as any,
+          reason: 'Edição cadastral de especificações'
+        });
+        success('Produto atualizado com sucesso!');
+      } else {
+        const created = localStore.saveProduct({
+          id: `prod-${Date.now()}`,
+          organization_id: DEMO_ORG_ID,
+          ...formData,
+          codigo_mpr: formData.codigo_mpr.trim(),
+          description: formData.description.trim(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        localStore.logAudit({
+          organization_id: DEMO_ORG_ID,
+          user_id: user?.id,
+          user_name: user?.full_name,
+          action: 'PRODUTO_CRIADO',
+          entity: 'products',
+          entity_id: created.id,
+          new_data: created as any,
+          reason: 'Cadastro de novo produto'
+        });
+        success('Produto cadastrado com sucesso!');
+      }
+
+      setProducts(localStore.getProducts());
+      setModalOpen(false);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -327,7 +340,7 @@ export const ProductsPage: React.FC = () => {
         footer={
           <>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSave}>Salvar Produto</Button>
+            <Button variant="primary" onClick={handleSave} loading={isSubmitting} disabled={isSubmitting}>Salvar Produto</Button>
           </>
         }
       >

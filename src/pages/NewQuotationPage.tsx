@@ -40,6 +40,7 @@ export const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onNavigate, 
   const [relatedClient, setRelatedClient] = useState('');
   const [deadlineDate, setDeadlineDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Selected Products with required quantities
   const [selectedItems, setSelectedItems] = useState<
@@ -118,6 +119,8 @@ export const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onNavigate, 
   };
 
   const handleCreateQuotation = () => {
+    if (isSubmitting) return;
+
     if (!projectName.trim()) {
       error('Por favor, informe o nome do projeto ou obra.');
       return;
@@ -131,94 +134,100 @@ export const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onNavigate, 
       return;
     }
 
-    const quotationId = `cot-${Date.now()}`;
+    setIsSubmitting(true);
 
-    // Monta itens
-    const items: QuotationItem[] = selectedItems.map((si, idx) => ({
-      id: `qitem-${quotationId}-${idx + 1}`,
-      quotation_id: quotationId,
-      product_id: si.product.id,
-      item_order: idx + 1,
-      quantity_bars: si.quantity_bars,
-      quantity_meters: si.quantity_meters,
-      estimated_weight_kg: si.estimated_weight_kg,
-      notes: si.notes,
-      created_at: new Date().toISOString(),
-      product: si.product
-    }));
+    try {
+      const quotationId = `cot-${Date.now()}`;
 
-    // Monta estruturas de fornecedores
-    const supplierQuotes: SupplierQuote[] = selectedSupplierIds.map((sId) => {
-      const sup = allSuppliers.find((s) => s.id === sId);
-      const sqId = `sq-${quotationId}-${sId}`;
-
-      // Inicia com itens não cotados prontos para lançamento
-      const sqItems = items.map((it) => ({
-        id: `sqi-${sqId}-${it.id}`,
-        supplier_quote_id: sqId,
-        quotation_item_id: it.id,
-        quoted_quantity: 0,
-        weight_kg: 0,
-        unit_price: 0,
-        price_unit: 'kg' as const,
-        ipi_percent: 0,
-        icms_percent: 18,
-        calculated_total: 0,
-        validation_status: 'NAO_COTADO' as const,
-        manual_exclude_from_lowest: false,
+      // Monta itens
+      const items: QuotationItem[] = selectedItems.map((si, idx) => ({
+        id: `qitem-${quotationId}-${idx + 1}`,
+        quotation_id: quotationId,
+        product_id: si.product.id,
+        item_order: idx + 1,
+        quantity_bars: si.quantity_bars,
+        quantity_meters: si.quantity_meters,
+        estimated_weight_kg: si.estimated_weight_kg,
+        notes: si.notes,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        product: si.product
       }));
 
-      return {
-        id: sqId,
-        quotation_id: quotationId,
-        supplier_id: sId,
-        proposal_date: new Date().toISOString().split('T')[0],
-        validity_days: 7,
-        payment_terms: sup?.payment_terms || '28 DDL',
-        calculated_subtotal: 0,
-        official_proposal_total: 0,
+      // Monta estruturas de fornecedores
+      const supplierQuotes: SupplierQuote[] = selectedSupplierIds.map((sId) => {
+        const sup = allSuppliers.find((s) => s.id === sId);
+        const sqId = `sq-${quotationId}-${sId}`;
+
+        // Inicia com itens não cotados prontos para lançamento
+        const sqItems = items.map((it) => ({
+          id: `sqi-${sqId}-${it.id}`,
+          supplier_quote_id: sqId,
+          quotation_item_id: it.id,
+          quoted_quantity: 0,
+          weight_kg: 0,
+          unit_price: 0,
+          price_unit: 'kg' as const,
+          ipi_percent: 0,
+          icms_percent: 18,
+          calculated_total: 0,
+          validation_status: 'NAO_COTADO' as const,
+          manual_exclude_from_lowest: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }));
+
+        return {
+          id: sqId,
+          quotation_id: quotationId,
+          supplier_id: sId,
+          proposal_date: new Date().toISOString().split('T')[0],
+          validity_days: 7,
+          payment_terms: sup?.payment_terms || '28 DDL',
+          calculated_subtotal: 0,
+          official_proposal_total: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          supplier: sup,
+          items: sqItems
+        };
+      });
+
+      const newQuotation: QuotationFull = {
+        id: quotationId,
+        organization_id: DEMO_ORG_ID,
+        quotation_number: quotationNumber,
+        project_name: projectName,
+        related_client: relatedClient,
+        responsible_user_id: user?.id,
+        responsible_user_name: user?.full_name,
+        quotation_date: new Date().toISOString().split('T')[0],
+        deadline_date: deadlineDate,
+        notes,
+        status: 'EM_COTACAO',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        supplier: sup,
-        items: sqItems
+        items,
+        supplier_quotes: supplierQuotes
       };
-    });
 
-    const newQuotation: QuotationFull = {
-      id: quotationId,
-      organization_id: DEMO_ORG_ID,
-      quotation_number: quotationNumber,
-      project_name: projectName,
-      related_client: relatedClient,
-      responsible_user_id: user?.id,
-      responsible_user_name: user?.full_name,
-      quotation_date: new Date().toISOString().split('T')[0],
-      deadline_date: deadlineDate,
-      notes,
-      status: 'EM_COTACAO',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      items,
-      supplier_quotes: supplierQuotes
-    };
+      localStore.saveQuotation(newQuotation);
+      localStore.logAudit({
+        organization_id: DEMO_ORG_ID,
+        user_id: user?.id,
+        user_name: user?.full_name,
+        action: 'NOVA_COTAÇÃO_CRIADA',
+        entity: 'quotations',
+        entity_id: quotationId,
+        new_data: { number: quotationNumber, project: projectName },
+        reason: 'Criação de nova cotação de compras'
+      });
 
-    localStore.saveQuotation(newQuotation);
-    localStore.logAudit({
-      organization_id: DEMO_ORG_ID,
-      user_id: user?.id,
-      user_name: user?.full_name,
-      action: 'NOVA_COTAÇÃO_CRIADA',
-      entity: 'quotations',
-      entity_id: quotationId,
-      new_data: { number: quotationNumber, project: projectName },
-      reason: 'Criação de nova cotação de compras'
-    });
-
-    success('Cotação criada com sucesso!', 'Redirecionando para o mapa comparativo...');
-    onSelectQuotation(quotationId);
-    onNavigate('quotation-detail');
+      success('Cotação criada com sucesso!', 'Redirecionando para o mapa comparativo...');
+      onSelectQuotation(quotationId);
+      onNavigate('quotation-detail');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -235,7 +244,13 @@ export const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onNavigate, 
           </div>
         </div>
 
-        <Button variant="primary" icon={<Save className="w-4 h-4" />} onClick={handleCreateQuotation}>
+        <Button
+          variant="primary"
+          icon={<Save className="w-4 h-4" />}
+          onClick={handleCreateQuotation}
+          loading={isSubmitting}
+          disabled={isSubmitting}
+        >
           Salvar & Abrir Mapa
         </Button>
       </div>

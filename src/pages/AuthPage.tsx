@@ -15,7 +15,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { evaluatePasswordStrength, sanitizeString } from '../lib/security';
+import { evaluatePasswordStrength, sanitizeString, isValidEmail, normalizeEmail, formatFriendlyErrorMessage } from '../lib/security';
 
 export const AuthPage: React.FC = () => {
   const { login, signUp, loginWithGoogle, resetPassword } = useAuth();
@@ -23,6 +23,8 @@ export const AuthPage: React.FC = () => {
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [loading, setLoading] = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
 
   // Form fields
   const [email, setEmail] = useState('');
@@ -32,59 +34,104 @@ export const AuthPage: React.FC = () => {
   const [position, setPosition] = useState('');
   const [department, setDepartment] = useState('');
 
+  // Contador regressivo de bloqueio por tentativas
+  React.useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutSeconds((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutSeconds]);
+
   const passwordStrength = evaluatePasswordStrength(password);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email.trim()) {
-      error('Informe seu e-mail para continuar.');
+    // 1. Verificação de Bloqueio por Força Bruta
+    if (lockoutSeconds > 0) {
+      error('Acesso Temporariamente Bloqueado', `Aguarde ${lockoutSeconds} segundos para tentar novamente.`);
       return;
     }
 
-    setLoading(true);
+    // 2. Sanitização e Normalização Estrita
+    const cleanEmail = normalizeEmail(email);
 
+    // 3. Validação de Preenchimento
+    if (!cleanEmail) {
+      error('Campo Obrigatório', 'Por favor, informe seu endereço de e-mail.');
+      return;
+    }
+
+    // 4. Validação de Formato RFC (Bloqueia samuel8877alves.gmail.com, samuel@.com, etc.)
+    if (!isValidEmail(cleanEmail)) {
+      error('Formato de E-mail Inválido', 'Digite um e-mail válido com @ e domínio completo (ex: nome@empresa.com).');
+      return;
+    }
+
+    // 5. Validação de Senha Obrigatória no Login
     if (mode === 'signin') {
-      const res = await login(sanitizeString(email), password);
+      if (!password) {
+        error('Campo Obrigatório', 'Por favor, informe sua senha para acessar.');
+        return;
+      }
+
+      setLoading(true);
+      const res = await login(cleanEmail, password);
       setLoading(false);
+
       if (res.success) {
+        setFailedAttempts(0);
         success('Acesso autorizado!', 'Bem-vindo ao SaberX.');
       } else {
-        error('Falha na autenticação', res.error || 'E-mail ou senha incorretos.');
+        const nextAttempts = failedAttempts + 1;
+        setFailedAttempts(nextAttempts);
+        if (nextAttempts >= 5) {
+          setLockoutSeconds(30);
+          error('Tentativas Excedidas', 'Muitas tentativas sem sucesso. Aguarde 30 segundos.');
+        } else {
+          error('Falha na autenticação', formatFriendlyErrorMessage(res.error));
+        }
       }
     } else if (mode === 'signup') {
-      if (!fullName.trim() || !companyName.trim()) {
-        setLoading(false);
-        error('Preencha seu nome e a empresa.');
+      const cleanName = sanitizeString(fullName);
+      const cleanCompany = sanitizeString(companyName);
+
+      if (!cleanName || !cleanCompany) {
+        error('Dados Incompletos', 'Preencha seu nome completo e a razão social da empresa.');
         return;
       }
-      if (password.length < 6) {
-        setLoading(false);
-        error('A senha deve ter no mínimo 6 caracteres.');
+      if (!password || password.length < 6) {
+        error('Senha Muito Curta', 'A senha corporativa deve conter no mínimo 6 caracteres.');
         return;
       }
 
-      const res = await signUp(sanitizeString(email), password, {
-        fullName: sanitizeString(fullName),
-        companyName: sanitizeString(companyName),
+      setLoading(true);
+      const res = await signUp(cleanEmail, password, {
+        fullName: cleanName,
+        companyName: cleanCompany,
         position: sanitizeString(position),
         department: sanitizeString(department),
         role: 'ADMIN'
       });
       setLoading(false);
+
       if (res.success) {
-        success('Conta criada!', 'Você já pode acessar o sistema.');
+        setFailedAttempts(0);
+        success('Conta criada com sucesso!', 'Você já pode acessar o sistema SaberX.');
       } else {
-        error('Não foi possível criar a conta', res.error);
+        error('Não foi possível cadastrar', formatFriendlyErrorMessage(res.error));
       }
     } else if (mode === 'forgot') {
-      const res = await resetPassword(sanitizeString(email));
+      setLoading(true);
+      const res = await resetPassword(cleanEmail);
       setLoading(false);
+
       if (res.success) {
-        success('E-mail enviado!', 'Verifique sua caixa de entrada.');
+        success('Instruções Enviadas!', 'Verifique sua caixa de entrada para redefinir a senha.');
         setMode('signin');
       } else {
-        error('Erro ao solicitar redefinição', res.error);
+        error('Erro ao redefinir', formatFriendlyErrorMessage(res.error));
       }
     }
   };
@@ -270,11 +317,16 @@ export const AuthPage: React.FC = () => {
               variant="primary"
               className="w-full mt-3"
               loading={loading}
+              disabled={loading || lockoutSeconds > 0}
               icon={<ArrowRight className="w-4 h-4" />}
             >
-              {mode === 'signin' && 'Acessar'}
-              {mode === 'signup' && 'Criar conta'}
-              {mode === 'forgot' && 'Enviar link'}
+              {lockoutSeconds > 0
+                ? `Aguarde ${lockoutSeconds}s...`
+                : mode === 'signin'
+                ? 'Acessar'
+                : mode === 'signup'
+                ? 'Criar conta'
+                : 'Enviar link'}
             </Button>
           </form>
         </div>

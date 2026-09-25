@@ -8,12 +8,14 @@ import { Customer, CustomerInput } from '../types/customer';
 import { localStore, DEMO_ORG_ID } from '../lib/storage';
 import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
+import { isValidEmail } from '../lib/security';
 
 export const CustomersPage: React.FC = () => {
   const { user, role } = useAuth();
   const { success, error } = useNotification();
   const [customers, setCustomers] = useState<Customer[]>(() => localStore.getCustomers());
   const [search, setSearch] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -81,30 +83,47 @@ export const CustomersPage: React.FC = () => {
   };
 
   const handleSave = () => {
+    if (isSubmitting) return;
+
     if (!formData.company_name.trim()) {
       error('A Razão Social do cliente é obrigatória.');
       return;
     }
 
-    if (editingCustomer) {
-      localStore.saveCustomer({
-        ...editingCustomer,
-        ...formData
-      });
-      success('Cliente atualizado com sucesso.');
-    } else {
-      localStore.saveCustomer({
-        id: `cust-${Date.now()}`,
-        organization_id: DEMO_ORG_ID,
-        ...formData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-      success('Cliente cadastrado com sucesso.');
+    if (formData.email && formData.email.trim() && !isValidEmail(formData.email.trim())) {
+      error('E-mail Inválido', 'Por favor, informe um endereço de e-mail válido para o cliente.');
+      return;
     }
 
-    setCustomers(localStore.getCustomers());
-    setModalOpen(false);
+    setIsSubmitting(true);
+
+    try {
+      if (editingCustomer) {
+        localStore.saveCustomer({
+          ...editingCustomer,
+          ...formData,
+          company_name: formData.company_name.trim(),
+          email: formData.email ? formData.email.trim().toLowerCase() : ''
+        });
+        success('Cliente atualizado com sucesso.');
+      } else {
+        localStore.saveCustomer({
+          id: `cust-${Date.now()}`,
+          organization_id: DEMO_ORG_ID,
+          ...formData,
+          company_name: formData.company_name.trim(),
+          email: formData.email ? formData.email.trim().toLowerCase() : '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+        success('Cliente cadastrado com sucesso.');
+      }
+
+      setCustomers(localStore.getCustomers());
+      setModalOpen(false);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -198,7 +217,7 @@ export const CustomersPage: React.FC = () => {
         footer={
           <>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSave}>Salvar Cliente</Button>
+            <Button variant="primary" onClick={handleSave} loading={isSubmitting} disabled={isSubmitting}>Salvar Cliente</Button>
           </>
         }
       >

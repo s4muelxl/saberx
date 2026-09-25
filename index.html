@@ -4,8 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon-192.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="description" content="SaberX - Sistema Integrado de Cotação, Compras, Vendas e Gestão de Produtos Siderúrgicos e Metalmecânicos" />
-    <title>SaberX | Sistema Web de Cotação, Compras e Vendas</title>
+    <meta name="description" content="SaberX é a plataforma corporativa de inteligência em suprimentos para cotação, análise comparativa de TCO, pedidos de compra e vendas de aço e produtos metalmecânicos." />
+    <link rel="canonical" href="https://saberx-lac.vercel.app/" />
+    <title>SaberX | Sistema de Cotação, Compras e Vendas</title>
+
+    <!-- Open Graph / Facebook / WhatsApp / Discord -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://saberx-lac.vercel.app/" />
+    <meta property="og:site_name" content="SaberX Enterprise" />
+    <meta property="og:title" content="SaberX | Sistema de Cotação, Compras e Vendas" />
+    <meta property="og:description" content="Sistema corporativo para gestão integrada de cotações de aço, análise TCO, compras e vendas na indústria metalmecânica." />
+    <meta property="og:image" content="https://saberx-lac.vercel.app/icon-512.svg" />
+    <meta property="og:locale" content="pt_BR" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://saberx-lac.vercel.app/" />
+    <meta name="twitter:title" content="SaberX | Sistema de Cotação, Compras e Vendas" />
+    <meta name="twitter:description" content="Sistema corporativo para gestão integrada de cotações de aço, análise TCO, compras e vendas na indústria metalmecânica." />
+    <meta name="twitter:image" content="https://saberx-lac.vercel.app/icon-512.svg" />
 
     <!-- PWA Web App Manifest -->
     <link rel="manifest" href="/manifest.json" />
@@ -25,6 +42,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   </head>
   <body class="bg-slate-950 text-slate-100 antialiased selection:bg-blue-600 selection:text-white">
+    <noscript>
+      <div style="font-family: system-ui, -apple-system, sans-serif; padding: 2.5rem 1.5rem; text-align: center; background-color: #020617; color: #f8fafc; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <h1 style="font-size: 1.8rem; font-weight: 800; margin-bottom: 0.75rem; letter-spacing: 0.05em; color: #38bdf8;">SABERX</h1>
+        <h2 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: #94a3b8;">Sistema de Cotação, Compras e Vendas</h2>
+        <p style="max-width: 540px; line-height: 1.6; color: #cbd5e1; margin-bottom: 1.5rem; font-size: 0.95rem;">
+          O SaberX é a plataforma de alta performance para suprimentos industriais e siderúrgicos, com motor de cálculo automatizado de TCO (Custo Total de Propriedade), auditoria e mapa comparativo de preços.
+        </p>
+        <p style="font-size: 0.85rem; color: #64748b;">
+          Para acessar o painel interativo completo, por favor, ative o JavaScript no seu navegador.
+        </p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>

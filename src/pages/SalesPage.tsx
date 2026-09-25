@@ -29,6 +29,7 @@ export const SalesPage: React.FC = () => {
   );
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const customers = localStore.getCustomers();
   const products = localStore.getProducts();
@@ -47,6 +48,8 @@ export const SalesPage: React.FC = () => {
   const { profit, marginPercent } = calculateProfitMargin(totalCost, totalSale);
 
   const handleCreateSalesQuote = () => {
+    if (isSubmitting) return;
+
     const cust = customers.find((c) => c.id === selectedCustomerId);
     const prod = products.find((p) => p.id === selectedProductId);
 
@@ -55,57 +58,63 @@ export const SalesPage: React.FC = () => {
       return;
     }
 
-    const item: SalesQuoteItem = {
-      id: `sqi-${Date.now()}`,
-      sales_quote_id: `sq-${Date.now()}`,
-      product_id: prod.id,
-      quantity,
-      unit: 'barra',
-      unit_cost: unitCost,
-      unit_sale_price: unitSalePrice,
-      discount_percent: 0,
-      tax_percent: 0,
-      total_cost: totalCost,
-      total_sale: totalSale,
-      profit,
-      margin_percent: marginPercent,
-      created_at: new Date().toISOString(),
-      product: prod
-    };
+    setIsSubmitting(true);
 
-    const newQuote: SalesQuote = {
-      id: `sq-${Date.now()}`,
-      organization_id: DEMO_ORG_ID,
-      quote_number: quoteNumber,
-      customer_id: cust.id,
-      responsible_user_id: user?.id,
-      quote_date: new Date().toISOString().split('T')[0],
-      total_cost: totalCost,
-      total_price: totalSale,
-      total_profit: profit,
-      margin_percent: marginPercent,
-      status: 'NEGOCIACAO',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      customer: cust,
-      items: [item]
-    };
+    try {
+      const item: SalesQuoteItem = {
+        id: `sqi-${Date.now()}`,
+        sales_quote_id: `sq-${Date.now()}`,
+        product_id: prod.id,
+        quantity,
+        unit: 'barra',
+        unit_cost: unitCost,
+        unit_sale_price: unitSalePrice,
+        discount_percent: 0,
+        tax_percent: 0,
+        total_cost: totalCost,
+        total_sale: totalSale,
+        profit,
+        margin_percent: marginPercent,
+        created_at: new Date().toISOString(),
+        product: prod
+      };
 
-    localStore.saveSalesQuote(newQuote);
-    localStore.logAudit({
-      organization_id: DEMO_ORG_ID,
-      user_id: user?.id,
-      user_name: user?.full_name,
-      action: 'NOVO_ORCAMENTO_VENDA',
-      entity: 'sales_quotes',
-      entity_id: newQuote.id,
-      new_data: { quote_number: quoteNumber, total: totalSale, margin: marginPercent },
-      reason: 'Criação de proposta comercial de venda'
-    });
+      const newQuote: SalesQuote = {
+        id: `sq-${Date.now()}`,
+        organization_id: DEMO_ORG_ID,
+        quote_number: quoteNumber,
+        customer_id: cust.id,
+        responsible_user_id: user?.id,
+        quote_date: new Date().toISOString().split('T')[0],
+        total_cost: totalCost,
+        total_price: totalSale,
+        total_profit: profit,
+        margin_percent: marginPercent,
+        status: 'NEGOCIACAO',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        customer: cust,
+        items: [item]
+      };
 
-    setSalesQuotes(localStore.getSalesQuotes());
-    setModalOpen(false);
-    success('Orçamento de venda criado com sucesso!');
+      localStore.saveSalesQuote(newQuote);
+      localStore.logAudit({
+        organization_id: DEMO_ORG_ID,
+        user_id: user?.id,
+        user_name: user?.full_name,
+        action: 'NOVO_ORCAMENTO_VENDA',
+        entity: 'sales_quotes',
+        entity_id: newQuote.id,
+        new_data: { quote_number: quoteNumber, total: totalSale, margin: marginPercent },
+        reason: 'Criação de proposta comercial de venda'
+      });
+
+      setSalesQuotes(localStore.getSalesQuotes());
+      setModalOpen(false);
+      success('Orçamento de venda criado com sucesso!');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const filteredQuotes = salesQuotes.filter((sq) => {
@@ -208,7 +217,7 @@ export const SalesPage: React.FC = () => {
         footer={
           <>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button variant="primary" onClick={handleCreateSalesQuote}>Criar Orçamento</Button>
+            <Button variant="primary" onClick={handleCreateSalesQuote} loading={isSubmitting} disabled={isSubmitting}>Criar Orçamento</Button>
           </>
         }
       >

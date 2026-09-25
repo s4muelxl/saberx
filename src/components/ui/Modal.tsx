@@ -51,16 +51,20 @@ export const Modal: React.FC<ModalProps> = ({
       {/* Modal Dialog */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
           className={`relative w-full ${maxWidthStyles[maxWidth]} bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-200`}
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
             <div>
-              <h3 className="text-lg font-bold text-white tracking-tight">{title}</h3>
+              <h3 id="modal-title" className="text-lg font-bold text-white tracking-tight">{title}</h3>
               {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
             </div>
             <button
               onClick={onClose}
+              aria-label="Fechar modal"
               className="text-slate-400 hover:text-white rounded-lg p-1.5 hover:bg-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />

@@ -165,4 +165,42 @@ describe('Testes Obrigatórios do Motor de Cálculo e Validação (Seção 58)',
     expect(analysis.lowestInvalidAlert?.supplierQuoteItemId).toBe('quote-pauli');
     expect(analysis.lowestInvalidAlert?.status).toBe('QUANTIDADE_INSUFICIENTE');
   });
+
+  // Testes de Segurança & Resiliência Numérica
+  it('Teste 8: Proteção contra NaN, Infinity e valores negativos em cálculos', () => {
+    expect(calculateQuotationTotal(NaN, 100, 10, 'kg')).toBe(1000);
+    expect(calculateQuotationTotal(10, NaN, 10, 'kg')).toBe(0);
+    expect(calculateQuotationTotal(10, 100, -5, 'kg')).toBe(0);
+    expect(calculateQuotationTotal(10, 100, Infinity, 'kg')).toBe(0);
+    expect(calculateSupplierSubtotal([
+      { calculated_total: 100 } as any,
+      { calculated_total: NaN } as any,
+      { calculated_total: 250 } as any
+    ])).toBe(350);
+  });
+});
+
+import { isValidEmail, normalizeEmail } from '../lib/security';
+
+describe('Testes de Validação e Sanitização de E-mail Corporativo', () => {
+  it('Deve rejeitar e-mails sem @ (ex: samuel8877alves.gmail.com)', () => {
+    expect(isValidEmail('samuel8877alves.gmail.com')).toBe(false);
+  });
+
+  it('Deve rejeitar e-mails com domínio incompleto (ex: samuel@.com)', () => {
+    expect(isValidEmail('samuel@.com')).toBe(false);
+  });
+
+  it('Deve rejeitar e-mails sem TLD válido (ex: samuel@com)', () => {
+    expect(isValidEmail('samuel@com')).toBe(false);
+  });
+
+  it('Deve aceitar e-mails válidos corporativos', () => {
+    expect(isValidEmail('samuel8877alves@gmail.com')).toBe(true);
+    expect(isValidEmail('comprador@saberx.com.br')).toBe(true);
+  });
+
+  it('Deve normalizar e-mails removendo espaços e passando para minúsculas', () => {
+    expect(normalizeEmail('  Samuel8877Alves@Gmail.Com  ')).toBe('samuel8877alves@gmail.com');
+  });
 });

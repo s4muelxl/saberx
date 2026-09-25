@@ -8,12 +8,14 @@ import { Supplier, SupplierInput } from '../types/supplier';
 import { localStore, DEMO_ORG_ID } from '../lib/storage';
 import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
+import { isValidEmail } from '../lib/security';
 
 export const SuppliersPage: React.FC = () => {
   const { user, role } = useAuth();
   const { success, error } = useNotification();
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => localStore.getSuppliers());
   const [search, setSearch] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -91,30 +93,47 @@ export const SuppliersPage: React.FC = () => {
   };
 
   const handleSave = () => {
+    if (isSubmitting) return;
+
     if (!formData.company_name.trim()) {
       error('A Razão Social é obrigatória.');
       return;
     }
 
-    if (editingSupplier) {
-      localStore.saveSupplier({
-        ...editingSupplier,
-        ...formData
-      });
-      success('Fornecedor atualizado com sucesso.');
-    } else {
-      localStore.saveSupplier({
-        id: `sup-${Date.now()}`,
-        organization_id: DEMO_ORG_ID,
-        ...formData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-      success('Fornecedor cadastrado com sucesso.');
+    if (formData.email && formData.email.trim() && !isValidEmail(formData.email.trim())) {
+      error('E-mail Inválido', 'Por favor, informe um endereço de e-mail válido para o fornecedor.');
+      return;
     }
 
-    setSuppliers(localStore.getSuppliers());
-    setModalOpen(false);
+    setIsSubmitting(true);
+
+    try {
+      if (editingSupplier) {
+        localStore.saveSupplier({
+          ...editingSupplier,
+          ...formData,
+          company_name: formData.company_name.trim(),
+          email: formData.email ? formData.email.trim().toLowerCase() : ''
+        });
+        success('Fornecedor atualizado com sucesso.');
+      } else {
+        localStore.saveSupplier({
+          id: `sup-${Date.now()}`,
+          organization_id: DEMO_ORG_ID,
+          ...formData,
+          company_name: formData.company_name.trim(),
+          email: formData.email ? formData.email.trim().toLowerCase() : '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+        success('Fornecedor cadastrado com sucesso.');
+      }
+
+      setSuppliers(localStore.getSuppliers());
+      setModalOpen(false);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -214,7 +233,7 @@ export const SuppliersPage: React.FC = () => {
         footer={
           <>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSave}>Salvar Fornecedor</Button>
+            <Button variant="primary" onClick={handleSave} loading={isSubmitting} disabled={isSubmitting}>Salvar Fornecedor</Button>
           </>
         }
       >
