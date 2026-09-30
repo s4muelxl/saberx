@@ -13,7 +13,11 @@ export const getSupabaseUrl = (): string => {
     const custom = localStorage.getItem(STORAGE_CUSTOM_URL);
     if (custom && custom.trim().length > 0) return custom.trim();
   }
-  return DEFAULT_SUPABASE_URL.trim();
+  const defaultUrl = DEFAULT_SUPABASE_URL.trim();
+  if (defaultUrl.includes('mggkhnzdlpdbwlppbnud') || defaultUrl.includes('your-project-id')) {
+    return '';
+  }
+  return defaultUrl;
 };
 
 export const getSupabaseAnonKey = (): string => {
@@ -21,17 +25,19 @@ export const getSupabaseAnonKey = (): string => {
     const custom = localStorage.getItem(STORAGE_CUSTOM_KEY);
     if (custom && custom.trim().length > 0) return custom.trim();
   }
-  return DEFAULT_SUPABASE_ANON_KEY.trim();
+  const defaultKey = DEFAULT_SUPABASE_ANON_KEY.trim();
+  if (defaultKey.includes('your-anon-public-key')) {
+    return '';
+  }
+  return defaultKey;
 };
 
 export const isCloudSyncEnabled = (): boolean => {
   if (typeof window === 'undefined') return false;
   const flag = localStorage.getItem(STORAGE_CLOUD_ENABLED);
-  // Se explicitamente setado como false, respeita
-  if (flag === 'false') return false;
-  // Se não configurado ou se URL for vazia, não força nuvem
-  const url = getSupabaseUrl();
-  return isSupabaseConfigured() && !url.includes('your-project-id');
+  // Requer flag 'true' explícita e URL válida configurada pelo usuário
+  if (flag !== 'true') return false;
+  return isSupabaseConfigured();
 };
 
 export const setCloudSyncEnabled = (enabled: boolean): void => {
@@ -48,9 +54,12 @@ export const isSupabaseConfigured = (): boolean => {
     url.trim().length > 10 &&
     url.startsWith('https://') &&
     !url.includes('your-project-id') &&
+    !url.includes('mggkhnzdlpdbwlppbnud') &&
+    !url.includes('placeholder.supabase.co') &&
     typeof key === 'string' &&
     key.trim().length > 20 &&
-    !key.includes('your-anon-public-key')
+    !key.includes('your-anon-public-key') &&
+    !key.includes('placeholder-key')
   );
 };
 

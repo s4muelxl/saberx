@@ -938,7 +938,7 @@ class LocalStorageManager {
     const users = this.getUsers();
     const cleanEmail = user.email.trim().toLowerCase();
     const index = users.findIndex((u) => u.email.toLowerCase() === cleanEmail || u.id === user.id);
-    const updatedUser = { ...user, updated_at: new Date().toISOString() };
+    const updatedUser: UserProfile = { ...user, role: 'ADMIN', updated_at: new Date().toISOString() };
 
     if (index >= 0) {
       users[index] = updatedUser;
@@ -975,13 +975,15 @@ class LocalStorageManager {
     const credentials = this.getItem<Record<string, string>>(STORAGE_KEYS.USER_CREDENTIALS, {});
     const savedPassword = credentials[cleanEmail];
 
+    // Todo usuário autenticado tem acesso total de administrador (ADMIN)
+    const adminUser: UserProfile = { ...user, role: 'ADMIN' };
+
     // Permite senhas padrão (123456, admin123) para usuários demo caso ainda não tenham senha salva
     if (!savedPassword) {
       if (cleanEmail.includes('demo') || cleanEmail.includes('saberx') || password.length >= 6) {
-        // Registra automaticamente essa senha para futuros logins
         credentials[cleanEmail] = password;
         this.setItem(STORAGE_KEYS.USER_CREDENTIALS, credentials);
-        return { success: true, user };
+        return { success: true, user: adminUser };
       }
     }
 
@@ -989,20 +991,45 @@ class LocalStorageManager {
       return { success: false, error: 'Senha incorreta. Verifique os dados digitados.' };
     }
 
-    return { success: true, user };
+    return { success: true, user: adminUser };
   }
 
   getCurrentUser(): UserProfile | null {
-    // Retorna apenas se houver uma sessão salva explicitamente (login real)
-    return this.getItem<UserProfile | null>(STORAGE_KEYS.CURRENT_USER, null);
+    const user = this.getItem<UserProfile | null>(STORAGE_KEYS.CURRENT_USER, null);
+    if (!user) return null;
+    // Garante que todo usuário ativo possua privilégio ADMIN
+    return { ...user, role: 'ADMIN' };
   }
 
   setCurrentUser(user: UserProfile | null): void {
     if (user) {
-      this.setItem(STORAGE_KEYS.CURRENT_USER, user);
+      this.setItem(STORAGE_KEYS.CURRENT_USER, { ...user, role: 'ADMIN' });
     } else {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
     }
+  }
+
+  /**
+   * Zera todas as informações transacionais quando uma nova conta corporativa é criada
+   */
+  resetWorkspaceForNewUser(companyName: string, user: UserProfile): void {
+    this.setItem(STORAGE_KEYS.QUOTATIONS, []);
+    this.setItem(STORAGE_KEYS.PURCHASE_ORDERS, []);
+    this.setItem(STORAGE_KEYS.SALES_QUOTES, []);
+    this.setItem(STORAGE_KEYS.AUDIT_LOGS, [
+      {
+        id: `log-${Date.now()}`,
+        organization_id: user.organization_id || DEMO_ORG_ID,
+        user_id: user.id,
+        user_name: user.full_name,
+        action: 'NOVA_CONTA_INICIALIZADA',
+        entity: 'ORGANIZACAO',
+        entity_id: user.organization_id || DEMO_ORG_ID,
+        reason: `Ambiente corporativo inicializado para "${companyName || 'Nova Organização'}". Todas as informações de cotações, compras e vendas anteriores foram zeradas para início da nova operação.`,
+        ip_address: '127.0.0.1',
+        created_at: new Date().toISOString(),
+      },
+    ]);
   }
 }
 

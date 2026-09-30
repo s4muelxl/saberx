@@ -94,7 +94,7 @@ export const GoogleOAuthModal: React.FC<GoogleOAuthModalProps> = ({ isOpen, onCl
                 </div>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-semibold">
-                Admin
+                Admin Total
               </span>
             </button>
 
@@ -102,22 +102,22 @@ export const GoogleOAuthModal: React.FC<GoogleOAuthModalProps> = ({ isOpen, onCl
             <button
               type="button"
               disabled={loading}
-              onClick={() => handleSelectAccount('suprimentos@saberx.com.br', 'Gestor de Suprimentos & Cotações')}
+              onClick={() => handleSelectAccount('admin.google@saberx.com.br', 'Administrador Google Workspace')}
               className="w-full flex items-center justify-between p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/40 hover:bg-slate-800 hover:border-emerald-500/50 transition-all text-left group"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-bold text-sm">
-                  GS
+                  GW
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-white group-hover:text-emerald-400 transition-colors">
-                    Gestor de Suprimentos
+                    Administrador Google Workspace
                   </div>
-                  <div className="text-xs text-slate-400">suprimentos@saberx.com.br</div>
+                  <div className="text-xs text-slate-400">admin.google@saberx.com.br</div>
                 </div>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">
-                Compras
+                Admin Total
               </span>
             </button>
 

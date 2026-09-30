@@ -79,4 +79,58 @@ describe('Storage & Local Database Management', () => {
     expect(sales.length).toBeGreaterThanOrEqual(1);
     expect(sales[0].quote_number).toContain('ORC-VND-');
   });
+
+  it('zera todas as informações ao criar nova conta (resetWorkspaceForNewUser)', () => {
+    // Verifica que existiam cotações iniciais
+    expect(localStore.getQuotations().length).toBeGreaterThan(0);
+    expect(localStore.getPurchaseOrders().length).toBeGreaterThan(0);
+    expect(localStore.getSalesQuotes().length).toBeGreaterThan(0);
+
+    const newUser: UserProfile = {
+      id: 'usr-nova-empresa-01',
+      organization_id: 'org-nova-01',
+      full_name: 'Novo Diretor',
+      email: 'diretor@novaempresa.com',
+      role: 'ADMIN',
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Zera o workspace para o novo usuário/empresa
+    localStore.resetWorkspaceForNewUser('Minha Nova Empresa S.A.', newUser);
+
+    // Todas as transações anteriores devem estar rigorosamente ZERADAS
+    expect(localStore.getQuotations()).toEqual([]);
+    expect(localStore.getPurchaseOrders()).toEqual([]);
+    expect(localStore.getSalesQuotes()).toEqual([]);
+
+    // Trilha de auditoria deve conter o registro de inicialização limpa
+    const logs = localStore.getAuditLogs();
+    expect(logs.length).toBe(1);
+    expect(logs[0].action).toBe('NOVA_CONTA_INICIALIZADA');
+    expect(logs[0].reason).toContain('Minha Nova Empresa S.A.');
+  });
+
+  it('garante privilégio total ADMIN para todos os usuários cadastrados e logados', () => {
+    const compradorUser: UserProfile = {
+      id: 'usr-qualquer',
+      organization_id: DEMO_ORG_ID,
+      full_name: 'Comprador Júnior',
+      email: 'junior@empresa.com',
+      role: 'COMPRAS' as any,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    localStore.saveUser(compradorUser, 'senha123');
+    const auth = localStore.verifyCredentials('junior@empresa.com', 'senha123');
+    expect(auth.success).toBe(true);
+    // Deve garantir acesso ADMIN para todo mundo
+    expect(auth.user?.role).toBe('ADMIN');
+
+    localStore.setCurrentUser(auth.user!);
+    expect(localStore.getCurrentUser()?.role).toBe('ADMIN');
+  });
 });

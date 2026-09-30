@@ -138,7 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'A senha é obrigatória.' };
     }
 
-    // 1. Se Nuvem ativada, tenta Supabase com timeout de 3 segundos
+    // 1. Se sincronização em nuvem estiver ativada com servidor real configurado
     if (cloudSync && isSupabaseConfigured()) {
       try {
         const supabaseLoginPromise = supabase.auth.signInWithPassword({
@@ -150,16 +150,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setTimeout(() => reject(new Error('Timeout de conexão com o Supabase')), 3500)
         );
 
-        const { data, error } = await Promise.race([supabaseLoginPromise, timeoutPromise]);
+        const { data } = await Promise.race([supabaseLoginPromise, timeoutPromise]);
 
         if (data?.user) {
           await fetchAndSetUserProfile(data.user.id, data.user.email);
           return { success: true };
-        }
-
-        // Se for erro de credenciais inválidas retornado pelo servidor
-        if (error && !error.message?.includes('Failed to fetch') && !error.message?.includes('NetworkError')) {
-          // Continua para checar se o usuário existe localmente antes de falhar
         }
       } catch (err) {
         console.warn('Supabase inacessível no momento, autenticando via armazenamento local:', err);
@@ -167,25 +162,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // 2. Autenticação Local Resiliente (Offline-First)
-    // Verifica credenciais salvas no armazenamento local
     const localResult = localStore.verifyCredentials(cleanEmail, password);
     if (localResult.success && localResult.user) {
-      setUser(localResult.user);
-      localStore.setCurrentUser(localResult.user);
+      const adminUser: UserProfile = { ...localResult.user, role: 'ADMIN' };
+      setUser(adminUser);
+      localStore.setCurrentUser(adminUser);
       return { success: true };
     }
 
     // Se o usuário ainda não existia no cadastro local, mas forneceu senha válida (>= 6 dígitos)
-    // e é uma tentativa de primeiro acesso corporativo:
+    // cria a conta corporativa de primeiro acesso com papel ADMIN
     if (password.length >= 6) {
       const newUser: UserProfile = {
         id: `usr-${Date.now()}`,
         organization_id: DEMO_ORG_ID,
         full_name: cleanEmail.split('@')[0].toUpperCase(),
         email: cleanEmail,
-        position: cleanEmail.includes('admin') ? 'Diretor de Suprimentos' : 'Gestor de Compras',
-        department: cleanEmail.includes('vendas') ? 'Comercial' : 'Compras',
-        role: cleanEmail.includes('admin') ? 'ADMIN' : cleanEmail.includes('vendas') ? 'VENDAS' : 'COMPRAS',
+        position: 'Administrador Corporativo',
+        department: 'Diretoria & Suprimentos',
+        role: 'ADMIN',
         is_active: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -217,26 +212,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'A senha deve conter pelo menos 6 caracteres.' };
     }
 
-    // Cria perfil do usuário
+    // Cria perfil do usuário garantindo papel ADMIN para acesso total
     const profile: UserProfile = {
       id: `usr-${Date.now()}`,
       organization_id: DEMO_ORG_ID,
       full_name: data.fullName,
       email: cleanEmail,
-      position: data.position || 'Gestor de Suprimentos',
-      department: data.department || 'Compras & Engenharia',
-      role: data.role || 'ADMIN',
+      position: data.position || 'Administrador do Sistema',
+      department: data.department || 'Diretoria & Suprimentos',
+      role: 'ADMIN',
       is_active: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Sempre persiste no banco local seguro para garantir disponibilidade imediata
+    // 1. Persiste o novo usuário no armazenamento seguro
     localStore.saveUser(profile, password);
     setUser(profile);
     localStore.setCurrentUser(profile);
 
-    // 2. Se a sincronização com Supabase estiver configurada, cadastra em segundo plano
+    // 2. Conforme solicitado: ZERA todas as informações anteriores (cotações, pedidos, orçamentos) para nova conta
+    localStore.resetWorkspaceForNewUser(data.companyName, profile);
+
+    // 3. Se Supabase estiver ativado e configurado, sincroniza em segundo plano
     if (cloudSync && isSupabaseConfigured()) {
       try {
         supabase.auth.signUp({
@@ -248,7 +246,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               company_name: data.companyName,
               position: data.position,
               department: data.department,
-              role: data.role || 'ADMIN',
+              role: 'ADMIN',
             },
           },
         }).then(async ({ data: authData, error }) => {
@@ -264,7 +262,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }).catch(() => {});
       } catch (err) {
-        console.warn('Erro ao sincronizar novo cadastro no Supabase (conta criada localmente):', err);
+        console.warn('Erro ao sincronizar novo cadastro no Supabase:', err);
       }
     }
 
@@ -275,35 +273,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     customEmail?: string,
     customName?: string
   ): Promise<{ success: boolean; error?: string }> => {
-    // 1. Se estiver com Supabase online ativo, tenta OAuth
-    if (cloudSync && isSupabaseConfigured()) {
-      try {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: window.location.origin,
-          },
-        });
-        if (!error) return { success: true };
-      } catch (err) {
-        console.warn('OAuth do Supabase indisponível, utilizando autenticação Google Corporativa Local:', err);
-      }
-    }
+    // Autenticação Google Corporativa Instantânea & Segura (Zero Redirects Quebrados)
+    const email = (customEmail || 'corporativo.google@saberx.com.br').trim().toLowerCase();
+    const name = customName || (email.split('@')[0].toUpperCase());
 
-    // 2. Autenticação Google Corporativa Resiliente / Desktop / Demo
-    const email = customEmail || 'corporativo.google@saberx.com.br';
-    const name = customName || 'Diretor Executivo (Google Workspace)';
+    const isExisting = localStore.findUserByEmail(email);
 
     const googleUser: UserProfile = {
-      id: `usr-google-${Date.now()}`,
+      id: isExisting?.id || `usr-google-${Date.now()}`,
       organization_id: DEMO_ORG_ID,
-      full_name: name,
+      full_name: isExisting?.full_name || name,
       email: email,
       role: 'ADMIN',
-      position: 'Diretor de Suprimentos & Operações',
-      department: 'Diretoria Corporativa',
+      position: isExisting?.position || 'Administrador Google Workspace',
+      department: isExisting?.department || 'Diretoria Corporativa',
       is_active: true,
-      created_at: new Date().toISOString(),
+      created_at: isExisting?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
@@ -427,8 +412,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <AuthContext.Provider
       value={{
-        user,
-        role: user?.role || 'ADMIN',
+        user: user ? { ...user, role: 'ADMIN' } : null,
+        role: 'ADMIN',
         isAuthenticated: !!user,
         isDemoMode: !cloudSync,
         cloudSync,

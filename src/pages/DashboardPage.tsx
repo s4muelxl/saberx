@@ -111,26 +111,30 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
       });
     });
 
-    const safeQuoted = totalQuoted || 48500;
-    const safeSavings = savings > 0 ? savings : 6420.80;
-    const pct = safeQuoted > 0 ? ((safeSavings / (safeQuoted + safeSavings)) * 100).toFixed(1) : '12.8';
+    if (filteredQuotations.length === 0) {
+      return {
+        totalSavings: 0,
+        totalQuotedValue: 0,
+        savingsPercentage: '0.0',
+      };
+    }
+
+    const pct = totalQuoted > 0 ? ((savings / (totalQuoted + savings)) * 100).toFixed(1) : '0.0';
 
     return {
-      totalSavings: safeSavings,
-      totalQuotedValue: safeQuoted,
+      totalSavings: savings,
+      totalQuotedValue: totalQuoted,
       savingsPercentage: pct,
     };
   }, [filteredQuotations]);
 
   // Total Compras e Vendas reais
   const totalPurchases = useMemo(() => {
-    const sum = purchaseOrders.reduce((acc, po) => acc + (po.total_amount || 0), 0);
-    return sum > 0 ? sum : 23780.00;
+    return purchaseOrders.reduce((acc, po) => acc + (po.total_amount || 0), 0);
   }, [purchaseOrders]);
 
   const totalSales = useMemo(() => {
-    const sum = salesQuotes.reduce((acc, sq) => acc + (sq.total_price || 0), 0);
-    return sum > 0 ? sum : 38950.00;
+    return salesQuotes.reduce((acc, sq) => acc + (sq.total_price || 0), 0);
   }, [salesQuotes]);
 
   // Lead Time Médio dos Fornecedores
@@ -138,7 +142,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
     const times = suppliers
       .map((s) => s.default_lead_time_days)
       .filter((t): t is number => typeof t === 'number' && !isNaN(t));
-    if (!times.length) return 7;
+    if (!times.length) return 0;
     return Math.round(times.reduce((a, b) => a + b, 0) / times.length);
   }, [suppliers]);
 
@@ -162,24 +166,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
       .filter((item) => item.valor > 0)
       .sort((a, b) => b.valor - a.valor);
 
-    if (result.length === 0) {
-      return [
-        { name: 'JD Aço', valor: 28450.00 },
-        { name: 'Paulisteel', valor: 14200.00 },
-        { name: 'Romeva Tubos', valor: 19800.00 },
-        { name: 'Luxfer Tubos', valor: 11300.00 },
-      ];
-    }
     return result;
   }, [suppliers, filteredQuotations]);
 
   // Histórico Mensal de Compras e Economia
   const monthlyTrendData = useMemo(() => {
     return [
-      { mes: 'Mai', compras: 38000, economia: 4800, cotações: 4 },
-      { mes: 'Jun', compras: 45000, economia: 5900, cotações: 6 },
-      { mes: 'Jul', compras: 32000, economia: 4100, cotações: 3 },
-      { mes: 'Ago', compras: 54000, economia: 7300, cotações: 8 },
+      { mes: 'Mai', compras: 0, economia: 0, cotações: 0 },
+      { mes: 'Jun', compras: 0, economia: 0, cotações: 0 },
+      { mes: 'Jul', compras: 0, economia: 0, cotações: 0 },
+      { mes: 'Ago', compras: 0, economia: 0, cotações: 0 },
       { mes: 'Set', compras: totalPurchases, economia: totalSavings, cotações: filteredQuotations.length },
     ];
   }, [totalPurchases, totalSavings, filteredQuotations]);
@@ -187,9 +183,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
   // Distribuição de status para PieChart
   const statusPieData = useMemo(() => {
     return [
-      { name: 'Em Cotação', value: openQuotes.length || 2, color: '#3b82f6' },
-      { name: 'Aguardando Aprovação', value: awaitingApproval.length || 1, color: '#f59e0b' },
-      { name: 'Aprovadas / Concluídas', value: completedQuotes.length || 3, color: '#10b981' },
+      { name: 'Em Cotação', value: openQuotes.length, color: '#3b82f6' },
+      { name: 'Aguardando Aprovação', value: awaitingApproval.length, color: '#f59e0b' },
+      { name: 'Aprovadas / Concluídas', value: completedQuotes.length, color: '#10b981' },
     ];
   }, [openQuotes, awaitingApproval, completedQuotes]);
 
@@ -413,7 +409,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
           </div>
           <div className="flex items-center gap-1.5 text-xs text-indigo-300 mt-2">
             <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{purchaseOrders.length || 3} pedidos de compra aprovados</span>
+            <span>{purchaseOrders.length} pedidos de compra aprovados</span>
           </div>
         </Card>
 
@@ -443,20 +439,27 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onSele
             title="Volume Cotado por Fornecedor (R$)"
             subtitle="Valores consolidados em propostas comerciais ativas"
           />
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={supplierChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={11} tickLine={false} />
-                <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.75rem', fontSize: '12px' }}
-                  formatter={(value: any) => [`R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Valor Cotado']}
-                />
-                <Bar dataKey="valor" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {supplierChartData.length === 0 ? (
+            <div className="h-64 w-full flex flex-col items-center justify-center text-slate-500 text-xs">
+              <Truck className="w-8 h-8 mb-2 text-slate-600" />
+              <span>Nenhum volume cotado registrado ainda.</span>
+            </div>
+          ) : (
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={supplierChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis dataKey="name" stroke="#64748b" fontSize={11} tickLine={false} />
+                  <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.75rem', fontSize: '12px' }}
+                    formatter={(value: any) => [`R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Valor Cotado']}
+                  />
+                  <Bar dataKey="valor" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </Card>
 
         {/* Gráfico 2: Status das Cotações (Donut) */}

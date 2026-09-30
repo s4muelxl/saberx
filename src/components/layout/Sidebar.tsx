@@ -107,9 +107,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             Módulos do Sistema
           </div>
           {navItems.map((item) => {
-            const hasAccess = item.roles.includes(role);
-            if (!hasAccess && role !== 'ADMIN') return null;
-
             const isActive = activePage === item.id || (item.id === 'quotations' && (activePage === 'quotation-detail' || activePage === 'new-quotation'));
             const Icon = item.icon;
 

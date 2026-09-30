@@ -147,11 +147,11 @@ export const AuthPage: React.FC = () => {
     }
   };
 
-  const handleQuickDemoLogin = async (role: 'ADMIN' | 'COMPRAS' | 'VENDAS') => {
+  const handleQuickDemoLogin = async (_role: 'ADMIN' | 'COMPRAS' | 'VENDAS' = 'ADMIN') => {
     setLoading(true);
-    await loginAsDemo(role);
+    await loginAsDemo('ADMIN');
     setLoading(false);
-    success('Acesso Demo Concluído', `Logado com perfil ${role}!`);
+    success('Acesso Autorizado', 'Conectado ao SaberX com Acesso Total de Administrador!');
   };
 
   return (
@@ -259,6 +259,15 @@ export const AuthPage: React.FC = () => {
             {/* Campos extras para cadastro */}
             {mode === 'signup' && (
               <>
+                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 text-[11px] text-blue-200 flex items-start gap-2.5">
+                  <Sparkles className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-white">Ambiente Exclusivo & Limpo</p>
+                    <p className="text-slate-300">
+                      Ao criar sua conta, todas as informações de cotações e compras são zeradas para sua empresa iniciar do zero com <strong>Acesso Total de Administrador (ADMIN)</strong>.
+                    </p>
+                  </div>
+                </div>
                 <Input
                   label="Nome Completo"
                   placeholder="Seu nome"
@@ -278,14 +287,14 @@ export const AuthPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2">
                   <Input
                     label="Cargo"
-                    placeholder="Comprador"
+                    placeholder="Administrador / Comprador"
                     value={position}
                     onChange={(e) => setPosition(e.target.value)}
                     leftIcon={<Briefcase className="w-4 h-4" />}
                   />
                   <Input
                     label="Setor"
-                    placeholder="Suprimentos"
+                    placeholder="Suprimentos / Diretoria"
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
                   />
