@@ -1,21 +1,151 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const DEFAULT_SUPABASE_URL = 'https://mggkhnzdlpdbwlppbnud.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1nZ2tobnpkbHBkYndscHBibnVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNzYxMDYsImV4cCI6MjEwNTc1MjEwNn0._ibawQj520kfPfnZrgLAZLZkDelAq_0Jw97XXszL2bs';
+const STORAGE_CUSTOM_URL = 'saberx_custom_supabase_url';
+const STORAGE_CUSTOM_KEY = 'saberx_custom_supabase_key';
+const STORAGE_CLOUD_ENABLED = 'saberx_cloud_sync_enabled';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+// Fallback padrão se não configurado pelo usuário
+const DEFAULT_SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string) || '';
+const DEFAULT_SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '';
+
+export const getSupabaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem(STORAGE_CUSTOM_URL);
+    if (custom && custom.trim().length > 0) return custom.trim();
+  }
+  return DEFAULT_SUPABASE_URL.trim();
+};
+
+export const getSupabaseAnonKey = (): string => {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem(STORAGE_CUSTOM_KEY);
+    if (custom && custom.trim().length > 0) return custom.trim();
+  }
+  return DEFAULT_SUPABASE_ANON_KEY.trim();
+};
+
+export const isCloudSyncEnabled = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const flag = localStorage.getItem(STORAGE_CLOUD_ENABLED);
+  // Se explicitamente setado como false, respeita
+  if (flag === 'false') return false;
+  // Se não configurado ou se URL for vazia, não força nuvem
+  const url = getSupabaseUrl();
+  return isSupabaseConfigured() && !url.includes('your-project-id');
+};
+
+export const setCloudSyncEnabled = (enabled: boolean): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_CLOUD_ENABLED, enabled ? 'true' : 'false');
+  }
+};
 
 export const isSupabaseConfigured = (): boolean => {
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
   return (
-    typeof supabaseUrl === 'string' &&
-    supabaseUrl.trim().length > 0 &&
-    !supabaseUrl.includes('your-project-id') &&
-    typeof supabaseAnonKey === 'string' &&
-    supabaseAnonKey.trim().length > 0 &&
-    !supabaseAnonKey.includes('your-anon-public-key')
+    typeof url === 'string' &&
+    url.trim().length > 10 &&
+    url.startsWith('https://') &&
+    !url.includes('your-project-id') &&
+    typeof key === 'string' &&
+    key.trim().length > 20 &&
+    !key.includes('your-anon-public-key')
   );
 };
 
-// Cliente Supabase conectado diretamente
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const saveSupabaseConfig = (url: string, anonKey: string): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_CUSTOM_URL, url.trim());
+    localStorage.setItem(STORAGE_CUSTOM_KEY, anonKey.trim());
+    localStorage.setItem(STORAGE_CLOUD_ENABLED, 'true');
+  }
+};
+
+export const clearSupabaseConfig = (): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(STORAGE_CUSTOM_URL);
+    localStorage.removeItem(STORAGE_CUSTOM_KEY);
+    localStorage.setItem(STORAGE_CLOUD_ENABLED, 'false');
+  }
+};
+
+export interface ConnectionTestResult {
+  success: boolean;
+  message: string;
+  latencyMs?: number;
+}
+
+export const testSupabaseConnection = async (
+  customUrl?: string,
+  customKey?: string
+): Promise<ConnectionTestResult> => {
+  const url = (customUrl || getSupabaseUrl()).trim();
+  const key = (customKey || getSupabaseAnonKey()).trim();
+
+  if (!url || !key) {
+    return {
+      success: false,
+      message: 'URL e Anon Key do Supabase são obrigatórios para o teste.',
+    };
+  }
+
+  const startTime = Date.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+  try {
+    // Testa endpoint de health ou rest
+    const res = await fetch(`${url}/auth/v1/health`, {
+      method: 'GET',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const latencyMs = Date.now() - startTime;
+
+    if (res.ok || res.status === 200 || res.status === 401) {
+      return {
+        success: true,
+        message: `Conexão bem-sucedida com o Supabase! (${latencyMs}ms)`,
+        latencyMs,
+      };
+    }
+
+    return {
+      success: false,
+      message: `Servidor retornou status HTTP ${res.status}. Verifique se as credenciais estão ativas.`,
+      latencyMs,
+    };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    const latencyMs = Date.now() - startTime;
+    if (err.name === 'AbortError') {
+      return {
+        success: false,
+        message: 'Tempo limite esgotado (timeout de 4s). Servidor inacessível.',
+        latencyMs,
+      };
+    }
+    return {
+      success: false,
+      message: `Falha ao alcançar o servidor Supabase: ${err.message || 'DNS ou conexão recusada'}.`,
+      latencyMs,
+    };
+  }
+};
+
+// Cria cliente Supabase resiliente
+const url = getSupabaseUrl() || 'https://placeholder.supabase.co';
+const key = getSupabaseAnonKey() || 'placeholder-key-000000000000000000000000';
+
+export const supabase: SupabaseClient = createClient(url, key, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});

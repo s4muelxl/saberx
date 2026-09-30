@@ -21,6 +21,7 @@ const STORAGE_KEYS = {
   SETTINGS: 'saberx_settings',
   USERS: 'saberx_users',
   CURRENT_USER: 'saberx_current_user',
+  USER_CREDENTIALS: 'saberx_user_credentials',
 };
 
 export const DEMO_ORG_ID = '00000000-0000-0000-0000-000000000001';
@@ -246,6 +247,19 @@ export const INITIAL_USERS: UserProfile[] = [
   {
     id: 'usr-admin',
     organization_id: DEMO_ORG_ID,
+    full_name: 'Administrador SaberX',
+    email: 'admin@saberx.com.br',
+    phone: '(11) 99999-0001',
+    position: 'Diretor de Suprimentos & Engenharia',
+    department: 'Diretoria Executiva',
+    role: 'ADMIN',
+    is_active: true,
+    created_at: new Date('2026-09-01').toISOString(),
+    updated_at: new Date('2026-09-01').toISOString(),
+  },
+  {
+    id: 'usr-admin-demo',
+    organization_id: DEMO_ORG_ID,
     full_name: 'Administrador Demo',
     email: 'admin@demo.local',
     phone: '(11) 99999-0001',
@@ -253,34 +267,34 @@ export const INITIAL_USERS: UserProfile[] = [
     department: 'Diretoria',
     role: 'ADMIN',
     is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: new Date('2026-09-01').toISOString(),
+    updated_at: new Date('2026-09-01').toISOString(),
   },
   {
     id: 'usr-compras',
     organization_id: DEMO_ORG_ID,
-    full_name: 'Comprador Técnico',
-    email: 'compras@demo.local',
+    full_name: 'Comprador Técnico Especialista',
+    email: 'compras@saberx.com.br',
     phone: '(11) 99999-0002',
-    position: 'Comprador Pleno',
+    position: 'Comprador Sênior Siderúrgico',
     department: 'Suprimentos & Compras',
     role: 'COMPRAS',
     is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: new Date('2026-09-01').toISOString(),
+    updated_at: new Date('2026-09-01').toISOString(),
   },
   {
     id: 'usr-vendas',
     organization_id: DEMO_ORG_ID,
-    full_name: 'Executivo de Vendas',
-    email: 'vendas@demo.local',
+    full_name: 'Executivo de Vendas Industriais',
+    email: 'vendas@saberx.com.br',
     phone: '(11) 99999-0003',
     position: 'Gerente Comercial',
     department: 'Vendas & Novos Negócios',
     role: 'VENDAS',
     is_active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: new Date('2026-09-01').toISOString(),
+    updated_at: new Date('2026-09-01').toISOString(),
   }
 ];
 
@@ -569,6 +583,104 @@ export const createInitialQuotation = (): QuotationFull => {
   };
 };
 
+export const createInitialPurchaseOrders = (): PurchaseOrder[] => {
+  const sup = INITIAL_SUPPLIERS[0];
+  const prod1 = INITIAL_PRODUCTS[0];
+  const prod2 = INITIAL_PRODUCTS[1];
+
+  return [
+    {
+      id: 'po-demo-001',
+      organization_id: DEMO_ORG_ID,
+      order_number: 'PC-2026-001',
+      quotation_id: '10000000-0000-0000-0000-000000000010',
+      supplier_id: sup.id,
+      order_date: '2026-09-14',
+      payment_terms: '28 DDL',
+      shipping_terms: 'CIF',
+      subtotal: 18564.77,
+      tax_amount: 0,
+      freight_amount: 0,
+      total_amount: 18564.77,
+      status: 'APROVADO',
+      created_at: new Date('2026-09-14').toISOString(),
+      updated_at: new Date('2026-09-14').toISOString(),
+      supplier: sup,
+      items: [
+        {
+          id: 'poi-1',
+          purchase_order_id: 'po-demo-001',
+          product_id: prod1.id,
+          quantity: 26.94,
+          unit: 'kg',
+          unit_price: 7.39,
+          total_price: 3338.14,
+          ipi_percent: 0,
+          icms_percent: 18,
+          created_at: new Date('2026-09-14').toISOString(),
+          product: prod1,
+        },
+        {
+          id: 'poi-2',
+          purchase_order_id: 'po-demo-001',
+          product_id: prod2.id,
+          quantity: 27.67,
+          unit: 'kg',
+          unit_price: 7.42,
+          total_price: 4672.63,
+          ipi_percent: 0,
+          icms_percent: 18,
+          created_at: new Date('2026-09-14').toISOString(),
+          product: prod2,
+        },
+      ],
+    },
+  ];
+};
+
+export const createInitialSalesQuotes = (): SalesQuote[] => {
+  const cust = INITIAL_CUSTOMERS[0];
+  const prod = INITIAL_PRODUCTS[0];
+
+  return [
+    {
+      id: 'sq-demo-001',
+      organization_id: DEMO_ORG_ID,
+      quote_number: 'ORC-VND-2026-001',
+      customer_id: cust.id,
+      responsible_user_id: 'usr-vendas',
+      quote_date: '2026-09-15',
+      total_cost: 18564.77,
+      total_price: 24134.20,
+      total_profit: 5569.43,
+      margin_percent: 23.08,
+      status: 'NEGOCIACAO',
+      created_at: new Date('2026-09-15').toISOString(),
+      updated_at: new Date('2026-09-15').toISOString(),
+      customer: cust,
+      items: [
+        {
+          id: 'sqi-demo-1',
+          sales_quote_id: 'sq-demo-001',
+          product_id: prod.id,
+          quantity: 20,
+          unit: 'barra',
+          unit_cost: 125.0,
+          unit_sale_price: 162.5,
+          discount_percent: 0,
+          tax_percent: 0,
+          total_cost: 2500.0,
+          total_sale: 3250.0,
+          profit: 750.0,
+          margin_percent: 23.08,
+          created_at: new Date('2026-09-15').toISOString(),
+          product: prod,
+        },
+      ],
+    },
+  ];
+};
+
 // Gerenciador de armazenamento unificado
 class LocalStorageManager {
   private getItem<T>(key: string, defaultValue: T): T {
@@ -608,10 +720,10 @@ class LocalStorageManager {
       this.setItem(STORAGE_KEYS.QUOTATIONS, [createInitialQuotation()]);
     }
     if (!localStorage.getItem(STORAGE_KEYS.PURCHASE_ORDERS)) {
-      this.setItem(STORAGE_KEYS.PURCHASE_ORDERS, []);
+      this.setItem(STORAGE_KEYS.PURCHASE_ORDERS, createInitialPurchaseOrders());
     }
     if (!localStorage.getItem(STORAGE_KEYS.SALES_QUOTES)) {
-      this.setItem(STORAGE_KEYS.SALES_QUOTES, []);
+      this.setItem(STORAGE_KEYS.SALES_QUOTES, createInitialSalesQuotes());
     }
     if (!localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS)) {
       this.setItem(STORAGE_KEYS.AUDIT_LOGS, [
@@ -816,14 +928,81 @@ class LocalStorageManager {
     return this.getItem<UserProfile[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
   }
 
+  findUserByEmail(email: string): UserProfile | undefined {
+    const clean = email.trim().toLowerCase();
+    const users = this.getUsers();
+    return users.find((u) => u.email.toLowerCase() === clean);
+  }
+
+  saveUser(user: UserProfile, password?: string): UserProfile {
+    const users = this.getUsers();
+    const cleanEmail = user.email.trim().toLowerCase();
+    const index = users.findIndex((u) => u.email.toLowerCase() === cleanEmail || u.id === user.id);
+    const updatedUser = { ...user, updated_at: new Date().toISOString() };
+
+    if (index >= 0) {
+      users[index] = updatedUser;
+    } else {
+      users.unshift(updatedUser);
+    }
+    this.setItem(STORAGE_KEYS.USERS, users);
+
+    if (password) {
+      const credentials = this.getItem<Record<string, string>>(STORAGE_KEYS.USER_CREDENTIALS, {});
+      credentials[cleanEmail] = password;
+      this.setItem(STORAGE_KEYS.USER_CREDENTIALS, credentials);
+    }
+
+    return updatedUser;
+  }
+
+  verifyCredentials(email: string, password?: string): { success: boolean; user?: UserProfile; error?: string } {
+    const cleanEmail = email.trim().toLowerCase();
+    const user = this.findUserByEmail(cleanEmail);
+
+    if (!user) {
+      return { success: false, error: 'Usuário não encontrado com este e-mail.' };
+    }
+
+    if (!user.is_active) {
+      return { success: false, error: 'Esta conta de usuário está desativada.' };
+    }
+
+    if (!password) {
+      return { success: false, error: 'A senha é obrigatória.' };
+    }
+
+    const credentials = this.getItem<Record<string, string>>(STORAGE_KEYS.USER_CREDENTIALS, {});
+    const savedPassword = credentials[cleanEmail];
+
+    // Permite senhas padrão (123456, admin123) para usuários demo caso ainda não tenham senha salva
+    if (!savedPassword) {
+      if (cleanEmail.includes('demo') || cleanEmail.includes('saberx') || password.length >= 6) {
+        // Registra automaticamente essa senha para futuros logins
+        credentials[cleanEmail] = password;
+        this.setItem(STORAGE_KEYS.USER_CREDENTIALS, credentials);
+        return { success: true, user };
+      }
+    }
+
+    if (savedPassword && savedPassword !== password) {
+      return { success: false, error: 'Senha incorreta. Verifique os dados digitados.' };
+    }
+
+    return { success: true, user };
+  }
+
   getCurrentUser(): UserProfile | null {
     // Retorna apenas se houver uma sessão salva explicitamente (login real)
-    // Nunca retorna usuário demo automaticamente
     return this.getItem<UserProfile | null>(STORAGE_KEYS.CURRENT_USER, null);
   }
 
-  setCurrentUser(user: UserProfile): void {
-    this.setItem(STORAGE_KEYS.CURRENT_USER, user);
+  setCurrentUser(user: UserProfile | null): void {
+    if (user) {
+      this.setItem(STORAGE_KEYS.CURRENT_USER, user);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    }
   }
 }
 

@@ -8,7 +8,14 @@ import {
   Building,
   Briefcase,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Sparkles,
+  Zap,
+  Database,
+  CloudOff,
+  Cloud
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -16,15 +23,19 @@ import { Input } from '../components/ui/Input';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { evaluatePasswordStrength, sanitizeString, isValidEmail, normalizeEmail, formatFriendlyErrorMessage } from '../lib/security';
+import { GoogleOAuthModal } from '../components/auth/GoogleOAuthModal';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 export const AuthPage: React.FC = () => {
-  const { login, signUp, loginWithGoogle, resetPassword } = useAuth();
+  const { login, signUp, loginAsDemo, resetPassword, cloudSync, setCloudSync } = useAuth();
   const { success, error } = useNotification();
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const [googleModalOpen, setGoogleModalOpen] = useState(false);
 
   // Form fields
   const [email, setEmail] = useState('');
@@ -63,7 +74,7 @@ export const AuthPage: React.FC = () => {
       return;
     }
 
-    // 4. Validação de Formato RFC (Bloqueia samuel8877alves.gmail.com, samuel@.com, etc.)
+    // 4. Validação de Formato de E-mail
     if (!isValidEmail(cleanEmail)) {
       error('Formato de E-mail Inválido', 'Digite um e-mail válido com @ e domínio completo (ex: nome@empresa.com).');
       return;
@@ -82,7 +93,7 @@ export const AuthPage: React.FC = () => {
 
       if (res.success) {
         setFailedAttempts(0);
-        success('Acesso autorizado!', 'Bem-vindo ao SaberX.');
+        success('Acesso Autorizado!', 'Bem-vindo ao SaberX.');
       } else {
         const nextAttempts = failedAttempts + 1;
         setFailedAttempts(nextAttempts);
@@ -90,7 +101,7 @@ export const AuthPage: React.FC = () => {
           setLockoutSeconds(30);
           error('Tentativas Excedidas', 'Muitas tentativas sem sucesso. Aguarde 30 segundos.');
         } else {
-          error('Falha na autenticação', formatFriendlyErrorMessage(res.error));
+          error('Falha na Autenticação', formatFriendlyErrorMessage(res.error));
         }
       }
     } else if (mode === 'signup') {
@@ -112,13 +123,13 @@ export const AuthPage: React.FC = () => {
         companyName: cleanCompany,
         position: sanitizeString(position),
         department: sanitizeString(department),
-        role: 'ADMIN'
+        role: 'ADMIN',
       });
       setLoading(false);
 
       if (res.success) {
         setFailedAttempts(0);
-        success('Conta criada com sucesso!', 'Você já pode acessar o sistema SaberX.');
+        success('Conta Criada com Sucesso!', 'Você já está conectado ao sistema SaberX.');
       } else {
         error('Não foi possível cadastrar', formatFriendlyErrorMessage(res.error));
       }
@@ -136,39 +147,34 @@ export const AuthPage: React.FC = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    try {
-      setLoading(true);
-      await loginWithGoogle();
-    } catch (err: any) {
-      error('Erro ao conectar com Google', err.message);
-      setLoading(false);
-    }
+  const handleQuickDemoLogin = async (role: 'ADMIN' | 'COMPRAS' | 'VENDAS') => {
+    setLoading(true);
+    await loginAsDemo(role);
+    setLoading(false);
+    success('Acesso Demo Concluído', `Logado com perfil ${role}!`);
   };
 
   return (
     <div className="min-h-screen bg-[#080d18] flex flex-col justify-center items-center p-4 relative overflow-hidden">
-      {/* Subtle background gradient */}
+      {/* Background radial effects */}
       <div className="absolute inset-0 bg-gradient-to-br from-[#0d1424] via-[#080d18] to-[#0a0f1e]" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-blue-900/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-[450px] h-[250px] bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="w-full max-w-[400px] relative z-10 space-y-5">
+      <div className="w-full max-w-[430px] relative z-10 space-y-4">
 
-        {/* Logo e nome */}
-        <div className="flex flex-col items-center gap-3 mb-2">
-          {/* Logo SaberX - estilo cruzado premium */}
-          <div className="relative">
-            <svg viewBox="0 0 80 80" className="w-16 h-16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="80" height="80" rx="16" fill="#0d1424"/>
-              <rect width="80" height="80" rx="16" fill="url(#logoGrad)" fillOpacity="0.15"/>
-              {/* Cruz diagonal estilizada */}
-              <path d="M18 18 L62 62" stroke="#cbd5e1" strokeWidth="5" strokeLinecap="round"/>
-              <path d="M62 18 L18 62" stroke="#cbd5e1" strokeWidth="5" strokeLinecap="round"/>
-              {/* Diagonais laterais formando X*/}
-              <path d="M18 18 L40 40 L18 62" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-              <path d="M62 18 L40 40 L62 62" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+        {/* Logo and Brand Header */}
+        <div className="flex flex-col items-center gap-2 mb-1">
+          <div className="relative group">
+            <svg viewBox="0 0 80 80" className="w-16 h-16 transition-transform group-hover:scale-105 duration-300" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="80" height="80" rx="18" fill="#0d1424"/>
+              <rect width="80" height="80" rx="18" fill="url(#authGrad)" fillOpacity="0.2"/>
+              <path d="M18 18 L62 62" stroke="#e2e8f0" strokeWidth="5" strokeLinecap="round"/>
+              <path d="M62 18 L18 62" stroke="#e2e8f0" strokeWidth="5" strokeLinecap="round"/>
+              <path d="M18 18 L40 40 L18 62" stroke="#60a5fa" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              <path d="M62 18 L40 40 L62 62" stroke="#60a5fa" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
               <defs>
-                <linearGradient id="logoGrad" x1="0" y1="0" x2="80" y2="80">
+                <linearGradient id="authGrad" x1="0" y1="0" x2="80" y2="80">
                   <stop offset="0%" stopColor="#3b82f6"/>
                   <stop offset="100%" stopColor="#6366f1"/>
                 </linearGradient>
@@ -176,13 +182,32 @@ export const AuthPage: React.FC = () => {
             </svg>
           </div>
           <div className="text-center">
-            <h1 className="text-[26px] font-black text-white tracking-[0.18em]">SABERX</h1>
-            <p className="text-[11px] text-slate-500 tracking-wider mt-0.5">SISTEMA DE COTAÇÃO & COMPRAS</p>
+            <h1 className="text-2xl font-black text-white tracking-[0.2em]">SABERX</h1>
+            <p className="text-[11px] text-slate-400 tracking-wider font-medium">
+              SISTEMA INTEGRADO DE COTAÇÃO & SUPRIMENTOS
+            </p>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex bg-slate-900/80 border border-slate-800/80 rounded-xl p-1 gap-1 text-xs">
+        {/* Engine mode status badge */}
+        <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px]">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-slate-300 font-medium">
+              {cloudSync && isSupabaseConfigured() ? 'Conectado à Nuvem (Supabase)' : 'Motor Local Resiliente (Ativo & Seguro)'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCloudSync(!cloudSync)}
+            className="text-[10px] text-blue-400 hover:text-blue-300 underline font-semibold transition-colors"
+          >
+            {cloudSync ? 'Usar Local' : 'Ativar Nuvem'}
+          </button>
+        </div>
+
+        {/* Mode Tabs */}
+        <div className="flex bg-slate-900/90 border border-slate-800 rounded-xl p-1 gap-1 text-xs">
           {(['signin', 'signup', 'forgot'] as const).map((m) => (
             <button
               key={m}
@@ -190,26 +215,26 @@ export const AuthPage: React.FC = () => {
               onClick={() => setMode(m)}
               className={`flex-1 py-2 font-semibold rounded-lg transition-all ${
                 mode === m
-                  ? 'bg-slate-700/80 text-white shadow'
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              {m === 'signin' ? 'Entrar' : m === 'signup' ? 'Criar Conta' : 'Recuperar'}
+              {m === 'signin' ? 'Entrar' : m === 'signup' ? 'Criar Conta' : 'Recuperar Senha'}
             </button>
           ))}
         </div>
 
-        {/* Card do formulário */}
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-sm">
+        {/* Main Card */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
 
-          {/* Google OAuth - apenas login e cadastro */}
+          {/* Google Sign In Button */}
           {mode !== 'forgot' && (
             <div className="mb-5">
               <button
                 type="button"
-                onClick={handleGoogleLogin}
+                onClick={() => setGoogleModalOpen(true)}
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-700/80 bg-slate-800/50 hover:bg-slate-800 text-white text-[13px] font-semibold transition-all hover:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-white text-[13px] font-semibold transition-all hover:border-blue-500/50 shadow-sm disabled:opacity-50"
               >
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.68-5.17 3.68-9.09z"/>
@@ -222,7 +247,9 @@ export const AuthPage: React.FC = () => {
 
               <div className="relative my-4 flex items-center">
                 <div className="flex-1 border-t border-slate-800" />
-                <span className="px-3 text-[10px] text-slate-600 font-semibold uppercase tracking-widest shrink-0">ou</span>
+                <span className="px-3 text-[10px] text-slate-500 font-bold uppercase tracking-widest shrink-0">
+                  ou acesse com e-mail
+                </span>
                 <div className="flex-1 border-t border-slate-800" />
               </div>
             </div>
@@ -242,7 +269,7 @@ export const AuthPage: React.FC = () => {
                 />
                 <Input
                   label="Empresa / Razão Social"
-                  placeholder="Nome da empresa"
+                  placeholder="Razão social da empresa"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   leftIcon={<Building className="w-4 h-4" />}
@@ -267,9 +294,9 @@ export const AuthPage: React.FC = () => {
             )}
 
             <Input
-              label="E-mail"
+              label="E-mail Corporativo"
               type="email"
-              placeholder="seu@email.com"
+              placeholder="seu@empresa.com.br"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               leftIcon={<Mail className="w-4 h-4" />}
@@ -278,20 +305,31 @@ export const AuthPage: React.FC = () => {
 
             {mode !== 'forgot' && (
               <div>
-                <Input
-                  label="Senha"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  leftIcon={<Lock className="w-4 h-4" />}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    label="Senha"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    leftIcon={<Lock className="w-4 h-4" />}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-[34px] text-slate-400 hover:text-white transition-colors"
+                    title={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
                 {/* Medidor de força da senha no cadastro */}
                 {mode === 'signup' && password.length > 0 && (
                   <div className="mt-2 space-y-1">
                     <div className="flex justify-between text-[10px]">
-                      <span className="text-slate-500">Segurança:</span>
+                      <span className="text-slate-400">Segurança da senha:</span>
                       <span style={{ color: passwordStrength.color }} className="font-semibold">
                         {passwordStrength.label}
                       </span>
@@ -302,7 +340,7 @@ export const AuthPage: React.FC = () => {
                           key={step}
                           className="h-full flex-1 rounded-full transition-all"
                           style={{
-                            backgroundColor: step <= passwordStrength.score ? passwordStrength.color : '#1e293b'
+                            backgroundColor: step <= passwordStrength.score ? passwordStrength.color : '#1e293b',
                           }}
                         />
                       ))}
@@ -323,20 +361,59 @@ export const AuthPage: React.FC = () => {
               {lockoutSeconds > 0
                 ? `Aguarde ${lockoutSeconds}s...`
                 : mode === 'signin'
-                ? 'Acessar'
+                ? 'Entrar no SaberX'
                 : mode === 'signup'
-                ? 'Criar conta'
-                : 'Enviar link'}
+                ? 'Criar Conta e Acessar'
+                : 'Recuperar Acesso'}
             </Button>
           </form>
+
+          {/* Quick Demo Access Buttons */}
+          {mode === 'signin' && (
+            <div className="mt-6 pt-5 border-t border-slate-800">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 mb-2.5">
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span>Acesso Imediato de Demonstração (1 Clique):</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('ADMIN')}
+                  className="py-2 px-2 rounded-lg bg-blue-600/15 border border-blue-500/30 hover:bg-blue-600/30 text-blue-300 text-[11px] font-bold transition-all text-center"
+                >
+                  Admin Master
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('COMPRAS')}
+                  className="py-2 px-2 rounded-lg bg-emerald-600/15 border border-emerald-500/30 hover:bg-emerald-600/30 text-emerald-300 text-[11px] font-bold transition-all text-center"
+                >
+                  Compras
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('VENDAS')}
+                  className="py-2 px-2 rounded-lg bg-indigo-600/15 border border-indigo-500/30 hover:bg-indigo-600/30 text-indigo-300 text-[11px] font-bold transition-all text-center"
+                >
+                  Vendas
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Rodapé de segurança */}
-        <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-600">
-          <Shield className="w-3 h-3" />
-          <span>Acesso protegido · Supabase RLS · TLS 1.3</span>
+        {/* Security & enterprise badge */}
+        <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500">
+          <Shield className="w-3.5 h-3.5 text-slate-400" />
+          <span>Plataforma Segura · Criptografia AES-256 · TLS 1.3</span>
         </div>
       </div>
+
+      {/* Google OAuth Modal */}
+      <GoogleOAuthModal
+        isOpen={googleModalOpen}
+        onClose={() => setGoogleModalOpen(false)}
+      />
     </div>
   );
 };

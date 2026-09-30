@@ -246,7 +246,16 @@ export const SalesPage: React.FC = () => {
             <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase">Produto Solicitado *</label>
             <select
               value={selectedProductId}
-              onChange={(e) => setSelectedProductId(e.target.value)}
+              onChange={(e) => {
+                const newId = e.target.value;
+                setSelectedProductId(newId);
+                const prod = products.find((p) => p.id === newId);
+                if (prod) {
+                  const estCost = Number(((prod.reference_price || 7.5) * (prod.weight_unit_kg || 16.76)).toFixed(2)) || 125.0;
+                  setUnitCost(estCost);
+                  setUnitSalePrice(Number((estCost * 1.25).toFixed(2)));
+                }
+              }}
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
             >
               {products.map((p) => (

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Menu, Database, LogOut, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { UserProfileModal } from './UserProfileModal';
+import { isTauriEnvironment } from '../../lib/tauri';
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -41,11 +42,18 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
 
       {/* Right: status + user */}
       <div className="flex items-center gap-2.5">
+        {/* Platform badge if desktop */}
+        {isTauriEnvironment() && (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-950/60 border border-blue-500/30 text-[11px] text-blue-300 font-semibold">
+            <span>Tauri Desktop</span>
+          </div>
+        )}
+
         {/* Connection status */}
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-[11px]">
           <Database className={`w-3 h-3 ${isDemoMode ? 'text-amber-400' : 'text-emerald-400'}`} />
-          <span className="text-slate-400 font-medium">
-            {isDemoMode ? 'Modo Local' : 'Supabase'}
+          <span className="text-slate-300 font-medium">
+            {isDemoMode ? 'Local Resiliente' : 'Supabase Nuvem'}
           </span>
           <span className={`w-1.5 h-1.5 rounded-full ${isDemoMode ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
         </div>

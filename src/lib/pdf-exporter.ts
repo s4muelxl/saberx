@@ -108,3 +108,85 @@ export function exportQuotationToPdf(quotation: QuotationFull): void {
 
   doc.save(`${quotation.quotation_number}_Relatorio_Executivo.pdf`);
 }
+
+export function exportPurchaseOrderToPdf(po: any): void {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  // Título e Cabeçalho Corporativo
+  doc.setFontSize(16);
+  doc.setTextColor(15, 23, 42); // Slate-900
+  doc.text('SABERX METALMECÂNICA | ORDEM DE COMPRA OFICIAL', 14, 18);
+
+  doc.setFontSize(10);
+  doc.setTextColor(71, 85, 105); // Slate-600
+  doc.text(`Pedido Nº: ${po.order_number}   |   Emissão: ${po.order_date}   |   Status: ${po.status}`, 14, 25);
+
+  doc.setDrawColor(203, 213, 225);
+  doc.line(14, 29, 196, 29);
+
+  // Dados do Fornecedor e Condições
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`Fornecedor: ${po.supplier?.company_name || po.supplier?.trade_name || 'N/A'}`, 14, 36);
+  doc.text(`CNPJ: ${po.supplier?.cnpj || 'N/A'}   |   Contato: ${po.supplier?.contact_person || 'N/A'}`, 14, 41);
+  doc.text(`Condição de Pagamento: ${po.payment_terms || '28 DDL'}   |   Frete: ${po.shipping_terms || 'CIF'}`, 14, 46);
+
+  // Tabela de Itens
+  const headers = ['#', 'Código MPR', 'Descrição', 'Qtd / Unid', 'Preço Unit.', 'Total'];
+  const bodyData = (po.items || []).map((it: any, idx: number) => [
+    `${idx + 1}`,
+    it.product?.codigo_mpr || '-',
+    it.product?.description || '-',
+    `${it.quantity} ${it.unit}`,
+    `R$ ${Number(it.unit_price || 0).toFixed(2)}`,
+    `R$ ${Number(it.total_price || 0).toFixed(2)}`,
+  ]);
+
+  autoTable(doc, {
+    startY: 52,
+    head: [headers],
+    body: bodyData,
+    theme: 'striped',
+    headStyles: {
+      fillColor: [30, 41, 59],
+      textColor: [255, 255, 255],
+      fontSize: 8,
+      fontStyle: 'bold',
+    },
+    bodyStyles: {
+      fontSize: 8,
+      textColor: [15, 23, 42],
+    },
+    styles: {
+      cellPadding: 2.5,
+    },
+  });
+
+  const finalY = (doc as any).lastAutoTable?.finalY || 120;
+
+  // Bloco de Totais
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    `VALOR TOTAL DO PEDIDO: R$ ${Number(po.total_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+    14,
+    finalY + 12
+  );
+
+  // Campo de Assinaturas
+  doc.setDrawColor(203, 213, 225);
+  doc.line(14, finalY + 38, 90, finalY + 38);
+  doc.line(120, finalY + 38, 196, finalY + 38);
+
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Departamento de Suprimentos\nSaberX S.A.', 14, finalY + 42);
+  doc.text(`Aceite do Fornecedor\n${po.supplier?.trade_name || 'Representante Legal'}`, 120, finalY + 42);
+
+  doc.save(`${po.order_number}_Ordem_De_Compra.pdf`);
+}
+

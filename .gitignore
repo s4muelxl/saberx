@@ -29,3 +29,6 @@ dist-ssr
 
 # Temporary files
 scratch/
+
+# Tauri build target
+src-tauri/target/

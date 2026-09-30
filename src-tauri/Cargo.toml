@@ -1,0 +1,18 @@
+[package]
+name = "saberx-desktop"
+version = "1.0.0"
+description = "SaberX - Sistema Integrado de Cotações, Compras e Vendas de Aço"
+authors = ["SaberX S.A."]
+edition = "2021"
+
+[lib]
+name = "saberx_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0-rc", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0-rc", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

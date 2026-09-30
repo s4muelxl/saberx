@@ -8,7 +8,8 @@ import {
   Clock,
   ChevronRight,
   Eye,
-  FileText
+  FileText,
+  Download
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -19,6 +20,7 @@ import { PurchaseOrder, PurchaseOrderStatus } from '../types/purchase';
 import { localStore } from '../lib/storage';
 import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
+import { exportPurchaseOrderToPdf } from '../lib/pdf-exporter';
 
 export const PurchasesPage: React.FC = () => {
   const { user, role } = useAuth();
@@ -148,7 +150,22 @@ export const PurchasesPage: React.FC = () => {
           subtitle={`Fornecedor: ${selectedPO.supplier?.trade_name || selectedPO.supplier?.company_name}`}
           maxWidth="2xl"
           footer={
-            <Button variant="outline" onClick={() => setSelectedPO(null)}>Fechar</Button>
+            <div className="flex items-center justify-between w-full">
+              <Button
+                variant="outline"
+                size="sm"
+                icon={<Download className="w-4 h-4 text-emerald-400" />}
+                onClick={() => {
+                  exportPurchaseOrderToPdf(selectedPO);
+                  success('PDF Gerado!', `Ordem de Compra ${selectedPO.order_number} exportada com sucesso!`);
+                }}
+              >
+                Exportar Ordem de Compra (PDF)
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => setSelectedPO(null)}>
+                Fechar
+              </Button>
+            </div>
           }
         >
           <div className="space-y-4 text-xs">

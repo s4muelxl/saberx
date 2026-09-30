@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft,
   FileSpreadsheet,
@@ -34,6 +34,10 @@ export const QuotationDetailPage: React.FC<QuotationDetailPageProps> = ({
   const [quotation, setQuotation] = useState<QuotationFull | undefined>(() =>
     localStore.getQuotationById(quotationId)
   );
+
+  useEffect(() => {
+    setQuotation(localStore.getQuotationById(quotationId));
+  }, [quotationId]);
 
   const [activeTab, setActiveTab] = useState<'matrix' | 'audit' | 'attachments'>('matrix');
 
