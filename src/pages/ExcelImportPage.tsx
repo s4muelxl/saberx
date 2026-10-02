@@ -8,13 +8,18 @@ import {
   ArrowLeft,
   Download,
   Sparkles,
-  Settings2,
   Table,
   Check,
   RefreshCw,
   Sliders,
   Filter,
-  Layers
+  Layers,
+  Database,
+  Info,
+  AlertCircle,
+  FileText,
+  ChevronRight,
+  Hash
 } from 'lucide-react';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -24,7 +29,8 @@ import {
   downloadOfficialQuotationTemplate,
   EnterpriseWorkbookAnalysis,
   EnterpriseImportRow,
-  ColumnMapping
+  ColumnMapping,
+  toColLetter
 } from '../lib/excel-importer';
 import { localStore, DEMO_ORG_ID } from '../lib/storage';
 import { QuotationFull, QuotationItem, SupplierQuote } from '../types/quotation';
@@ -42,10 +48,13 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
   const { user } = useAuth();
   const { success, error, info } = useNotification();
 
-  // Wizard Step: 1 = Upload, 2 = Mapeamento, 3 = Higienização & Conflito, 4 = Prévia & Conclusão
+  // Wizard Step: 1 = Arquivo & Abas, 2 = Mapeamento & Tipagem, 3 = Governança & Conflitos, 4 = Homologação Pré-Voo
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [loading, setLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [analysis, setAnalysis] = useState<EnterpriseWorkbookAnalysis | null>(null);
+
+  // Mapeamento de Colunas
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({
     mprCol: 1,
     descCol: 2,
@@ -58,40 +67,62 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
     refPriceCol: -1
   });
 
-  // Estratégia de Duplicação
+  // Estratégia de Conflito de Produtos
   const [updateExistingProducts, setUpdateExistingProducts] = useState(true);
 
   // Linhas Processadas
   const [processedRows, setProcessedRows] = useState<EnterpriseImportRow[]>([]);
-  const [previewFilter, setPreviewFilter] = useState<'all' | 'new' | 'existing' | 'warnings'>('all');
+  const [previewFilter, setPreviewFilter] = useState<'all' | 'valid' | 'warnings' | 'errors' | 'new' | 'existing'>('all');
 
   const existingProducts = localStore.getProducts();
   const existingSuppliers = localStore.getSuppliers();
 
-  // 1. Processa upload inicial
-  const handleFileUpload = async (file: File) => {
+  // 1. Processa upload inicial ou alteração de aba / linha de cabeçalho
+  const handleFileProcess = async (fileOrBuffer: File | ArrayBuffer, fileName?: string, targetSheet?: string, customHeaderRow?: number) => {
     try {
       setLoading(true);
-      const res = await analyzeExcelWorkbook(file);
+      const res = await analyzeExcelWorkbook(fileOrBuffer, {
+        fileName: fileName || (fileOrBuffer instanceof File ? fileOrBuffer.name : analysis?.fileName),
+        targetSheetName: targetSheet,
+        customHeaderRowIndex: customHeaderRow,
+      });
+
       setAnalysis(res);
       setColumnMapping(res.suggestedMapping);
-      setStep(2); // Avança para etapa de mapeamento
-      success('Arquivo lido com sucesso!', 'Verifique as colunas sugeridas pelo assistente inteligente.');
+      success('Arquivo processado com sucesso', `${res.sheets.length} aba(s) e ${res.headers.length} colunas identificadas.`);
     } catch (err: any) {
-      error('Erro ao ler a planilha Excel', err.message || 'Verifique o formato.');
+      error('Erro ao processar planilha Excel', err.message || 'Verifique o formato do arquivo.');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleFileUpload = (file: File) => {
+    handleFileProcess(file);
+    setStep(1);
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFileUpload(e.dataTransfer.files[0]);
     }
   };
 
-  // Carrega planilha modelo oficial SaberX com os 5 Pilares Corporativos
+  // Re-analisa se o usuário mudar de aba
+  const handleSheetChange = (sheetName: string) => {
+    if (!analysis?.arrayBuffer) return;
+    handleFileProcess(analysis.arrayBuffer, analysis.fileName, sheetName, undefined);
+  };
+
+  // Re-analisa se o usuário mudar a linha do cabeçalho
+  const handleHeaderRowChange = (headerRow: number) => {
+    if (!analysis?.arrayBuffer) return;
+    handleFileProcess(analysis.arrayBuffer, analysis.fileName, analysis.selectedSheetName, headerRow);
+  };
+
+  // Carrega planilha oficial corporativa modelo
   const handleLoadDemoTemplate = () => {
     const ws_data = [
       ['SABERX - MAPA DE COTAÇÃO E COMPARATIVO DE PREÇOS (TCO PROCUREMENT)'],
@@ -220,7 +251,6 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'SABERX_MAPA_COTACAO');
 
-    // Aba de BI Dashboard
     const dash_data = [
       ['SABERX - DASHBOARD EXECUTIVO DE SUPRIMENTOS (BI)'],
       [],
@@ -240,7 +270,7 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
     handleFileUpload(file);
   };
 
-  // 2. Conclui Mapeamento e Avança para Validação
+  // 2. Conclui Mapeamento e Avança para Resolução de Conflitos
   const handleProceedToValidation = () => {
     if (!analysis) return;
     const rows = processMappedExcelRows(analysis, columnMapping, existingProducts);
@@ -248,19 +278,19 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
     setStep(3);
   };
 
-  // 3. Conclui Higienização e Avança para Prévia
+  // 3. Conclui Higienização e Avança para Homologação Pré-Voo
   const handleProceedToPreview = () => {
     setStep(4);
   };
 
-  // 4. Confirmação Final da Importação
+  // 4. Confirmação Final da Importação e Inserção no Banco
   const handleFinalImport = () => {
     if (!analysis || processedRows.length === 0) return;
 
     let newProdsCount = 0;
     let updatedProdsCount = 0;
 
-    // 1. Cadastra ou atualiza os produtos
+    // 1. Ingestão / Atualização dos produtos
     processedRows.forEach((row) => {
       const existing = existingProducts.find(
         (p) => p.codigo_mpr.trim().toUpperCase() === row.codigo_mpr.trim().toUpperCase()
@@ -284,7 +314,7 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
           codigo_mpr: row.codigo_mpr,
           description: row.description,
           category: 'Aço Carbono',
-          dimensions: row.dimensions || 'Conforme projeto',
+          dimensions: row.dimensions || 'Conforme especificação',
           material: row.material || 'AISI 1020',
           stock_unit: 'barra',
           purchase_unit: 'kg',
@@ -298,7 +328,7 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
       }
     });
 
-    // 2. Gera nova Cotação com os fornecedores mapeados
+    // 2. Geração da Cotação com os fornecedores
     const quotationId = `cot-imp-${Date.now()}`;
     const refreshedProducts = localStore.getProducts();
 
@@ -320,7 +350,6 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
       };
     });
 
-    // Vincula os fornecedores da planilha ou parceiros cadastrados
     const supplierQuotes: SupplierQuote[] = existingSuppliers.slice(0, 3).map((sup, sIdx) => {
       const sqId = `sq-${quotationId}-${sup.id}`;
       const sqItems = items.map((it, itIdx) => {
@@ -378,7 +407,7 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
       responsible_user_id: user?.id,
       responsible_user_name: analysis.metadata?.responsible_user_name || user?.full_name || 'Comprador Técnico',
       quotation_date: analysis.metadata?.quotation_date || new Date().toISOString().split('T')[0],
-      notes: `Importado via Assistente Corporativo SaberX com Matriz TCO (${processedRows.length} itens)`,
+      notes: `Importado via Estação Corporativa SaberX (${processedRows.length} itens homologados)`,
       status: (analysis.metadata?.status as any) || 'EM_COTACAO',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -394,303 +423,581 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
       action: 'IMPORTACAO_EXCEL_ENTERPRISE',
       entity: 'quotations',
       entity_id: quotationId,
-      new_data: { file: analysis.fileName, newProducts: newProdsCount, updatedProducts: updatedProdsCount },
-      reason: 'Importação profissional multi-etapas com mapeamento personalizado'
+      new_data: {
+        file: analysis.fileName,
+        sheet: analysis.selectedSheetName,
+        totalItems: processedRows.length,
+        newProducts: newProdsCount,
+        updatedProducts: updatedProdsCount
+      },
+      reason: `Ingestão de mapa de cotação corporativo "${analysis.fileName}" com matriz TCO.`
     });
 
     success(
-      'Importação concluída com sucesso!',
-      `${newProdsCount} novos produtos cadastrados, ${updatedProdsCount} atualizados e Mapa de Cotação gerado.`
+      'Mapa de cotação homologado e gerado!',
+      `${newProdsCount} novos produtos cadastrados e ${updatedProdsCount} itens atualizados com sucesso.`
     );
 
     onSelectQuotation(quotationId);
     onNavigate('quotation-detail');
   };
 
+  // Contadores de integridade
+  const countTotal = processedRows.length;
+  const countValid = processedRows.filter((r) => r.status === 'VALID').length;
+  const countWarnings = processedRows.filter((r) => r.status === 'WARNING').length;
+  const countErrors = processedRows.filter((r) => r.status === 'ERROR').length;
+  const countNew = processedRows.filter((r) => !r.isExisting).length;
+  const countExisting = processedRows.filter((r) => r.isExisting).length;
+
   const filteredPreviewRows = processedRows.filter((r) => {
+    if (previewFilter === 'valid') return r.status === 'VALID';
+    if (previewFilter === 'warnings') return r.status === 'WARNING';
+    if (previewFilter === 'errors') return r.status === 'ERROR';
     if (previewFilter === 'new') return !r.isExisting;
     if (previewFilter === 'existing') return r.isExisting;
-    if (previewFilter === 'warnings') return r.validationWarnings.length > 0 || r.validationErrors.length > 0;
     return true;
   });
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 max-w-6xl mx-auto font-sans">
+      {/* Header Corporativo */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-500/30">
+              MÓDULO DE INGESTÃO
+            </span>
+            <span className="text-xs text-slate-400 font-mono">MAPA DE COTAÇÃO & TCO</span>
+          </div>
+          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2.5 mt-1">
             <UploadCloud className="w-6 h-6 text-emerald-400" />
-            Assistente Corporativo de Importação Excel
+            Estação de Importação de Mapas de Cotação
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Motor inteligente com reconhecimento de abas, mapeamento de colunas e validação antes da gravação
+            Mecanismo corporativo de ingestão de matrizes de suprimentos, validação pré-voo de tipagem e higienização cadastral.
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          icon={<Download className="w-4 h-4 text-blue-400" />}
-          onClick={downloadOfficialQuotationTemplate}
-        >
-          Baixar Planilha Modelo (.xlsx)
-        </Button>
+        <div className="flex items-center gap-2.5">
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<Download className="w-4 h-4 text-blue-400" />}
+            onClick={downloadOfficialQuotationTemplate}
+          >
+            Baixar Matriz Padrão (.xlsx)
+          </Button>
+        </div>
       </div>
 
-      {/* Visual Stepper */}
+      {/* Stepper Corporativo Técnico */}
       <div className="grid grid-cols-4 gap-2 text-xs font-semibold">
         {[
-          { num: 1, label: '1. Arquivo & Aba' },
-          { num: 2, label: '2. Mapeamento' },
-          { num: 3, label: '3. Higienização' },
-          { num: 4, label: '4. Prévia & Impacto' }
+          { num: 1, title: 'Arquivo & Abas', desc: 'Ingestão e leitura' },
+          { num: 2, title: 'Mapeamento & Tipos', desc: 'Inspeção de colunas' },
+          { num: 3, title: 'Governança & Conflitos', desc: 'Resolução cadastral' },
+          { num: 4, title: 'Homologação Pré-Voo', desc: 'Prévia de impacto' }
         ].map((s) => (
           <div
             key={s.num}
-            className={`p-3 rounded-xl border text-center transition-all ${
+            className={`p-3 rounded-xl border text-left transition-all ${
               step === s.num
-                ? 'bg-blue-600/20 border-blue-500 text-blue-300 shadow-lg shadow-blue-500/10'
+                ? 'bg-blue-600/15 border-blue-500 text-white shadow-lg shadow-blue-500/10'
                 : step > s.num
                 ? 'bg-emerald-950/20 border-emerald-500/40 text-emerald-400'
-                : 'bg-slate-900 border-slate-800 text-slate-500'
+                : 'bg-slate-900/60 border-slate-800 text-slate-500'
             }`}
           >
-            <div className="text-[10px] uppercase font-bold text-slate-400">Passo {s.num}</div>
-            <div className="truncate font-bold text-white mt-0.5">{s.label.split('. ')[1]}</div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase font-bold tracking-wider opacity-75">
+                FASE 0{s.num}
+              </span>
+              {step > s.num && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+            </div>
+            <div className="font-bold text-white mt-0.5 text-xs truncate">{s.title}</div>
+            <div className="text-[10px] text-slate-400 truncate">{s.desc}</div>
           </div>
         ))}
       </div>
 
-      {/* PASSO 1: Upload de Arquivo */}
+      {/* ETAPA 1: Ingestão de Arquivo & Multi-Aba */}
       {step === 1 && (
-        <Card className="p-8">
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            className="border-2 border-dashed border-slate-700 hover:border-blue-500 transition-colors rounded-2xl p-10 text-center flex flex-col items-center justify-center cursor-pointer bg-slate-900/50"
-            onClick={() => document.getElementById('file-upload-input')?.click()}
-          >
-            <input
-              id="file-upload-input"
-              type="file"
-              accept=".xlsx, .xls, .csv"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  handleFileUpload(e.target.files[0]);
-                }
+        <div className="space-y-4">
+          <Card className="p-6">
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
               }}
-            />
-            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 shadow-lg shadow-emerald-500/10">
-              <FileSpreadsheet className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-bold text-white">Arraste seu arquivo Excel (.xlsx) ou clique para procurar</h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-md">
-              Compatível com planilhas de mapa de cotação de qualquer fornecedor ou modelo interno da empresa.
-            </p>
-          </div>
-
-          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl bg-slate-950 border border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <Sparkles className="w-5 h-5 text-blue-400 shrink-0" />
-              <div className="text-xs">
-                <strong className="text-white">Deseja simular o fluxo com dados reais?</strong>
-                <p className="text-slate-400">Carregue a planilha modelo de referência com 1 clique.</p>
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById('excel-file-input')?.click()}
+              className={`border-2 border-dashed rounded-2xl p-10 text-center flex flex-col items-center justify-center cursor-pointer transition-all ${
+                isDragging
+                  ? 'border-emerald-500 bg-emerald-500/10'
+                  : 'border-slate-700 hover:border-blue-500/70 bg-slate-950/60'
+              }`}
+            >
+              <input
+                id="excel-file-input"
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleFileUpload(e.target.files[0]);
+                  }
+                }}
+              />
+              <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-3 shadow-lg shadow-emerald-500/10">
+                <FileSpreadsheet className="w-8 h-8" />
               </div>
+              <h3 className="text-base font-bold text-white tracking-tight">
+                {analysis ? 'Substituir arquivo de cotação (.xlsx, .xls)' : 'Arraste a planilha de cotação ou clique para selecionar'}
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-md">
+                Compatível com mapas de cotação industriais, tabelas TCO multi-fornecedores e planilhas de corte de aço.
+              </p>
             </div>
-            <Button variant="secondary" size="sm" onClick={handleLoadDemoTemplate}>
-              Carregar Planilha Exemplo
-            </Button>
-          </div>
-        </Card>
+
+            {/* Ingestão de Exemplo Rápido para Teste Rápido de Suprimentos */}
+            <div className="mt-4 p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <FileText className="w-4 h-4 text-blue-400 shrink-0" />
+                <span className="text-xs text-slate-300">
+                  Carregar mapa de cotação siderúrgica oficial de referência (JD Aço, Paulisteel e Romeva).
+                </span>
+              </div>
+              <Button variant="secondary" size="sm" onClick={handleLoadDemoTemplate}>
+                Carregar Matriz Oficial
+              </Button>
+            </div>
+          </Card>
+
+          {/* Painel de Metadados e Seleção de Aba se o arquivo já foi lido */}
+          {analysis && (
+            <Card className="p-6 space-y-5 animate-fadeIn">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                <div>
+                  <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider">
+                    ARQUIVO IDENTIFICADO
+                  </span>
+                  <h3 className="text-base font-bold text-white mt-0.5">{analysis.fileName}</h3>
+                  <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                    <span>Tamanho: <strong className="text-slate-200">{(analysis.fileSize / 1024).toFixed(1)} KB</strong></span>
+                    <span>•</span>
+                    <span>Abas Encontradas: <strong className="text-slate-200">{analysis.sheets.length}</strong></span>
+                  </div>
+                </div>
+
+                <Button variant="primary" onClick={() => setStep(2)}>
+                  Avançar para Mapeamento <ArrowRight className="w-4 h-4 ml-1.5" />
+                </Button>
+              </div>
+
+              {/* Seletor de Abas da Pasta de Trabalho */}
+              <div>
+                <label className="text-xs font-bold text-white flex items-center gap-1.5 mb-2">
+                  <Layers className="w-4 h-4 text-blue-400" />
+                  Selecione a Aba de Cotação da Pasta de Trabalho:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {analysis.sheets.map((sheet) => {
+                    const isSelected = sheet.name === analysis.selectedSheetName;
+                    return (
+                      <button
+                        key={sheet.name}
+                        type="button"
+                        onClick={() => handleSheetChange(sheet.name)}
+                        className={`p-3 rounded-xl border text-left transition-all ${
+                          isSelected
+                            ? 'bg-blue-600/20 border-blue-500 text-white shadow-md'
+                            : 'bg-slate-950 border-slate-800 hover:border-slate-700 text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs truncate">{sheet.name}</span>
+                          {isSelected && <span className="w-2 h-2 rounded-full bg-blue-400" />}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-1">
+                          {sheet.rowCount} linhas × {sheet.columnCount} colunas
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Seletor de Linha do Cabeçalho */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Sliders className="w-4 h-4 text-amber-400" />
+                    Linha de Cabeçalho da Tabela de Itens:
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Defina em qual linha da planilha começam os nomes das colunas (Código MPR, Descrição, Barras...).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={analysis.headerRowIndex}
+                    onChange={(e) => handleHeaderRowChange(parseInt(e.target.value))}
+                    className="bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold"
+                  >
+                    {Array.from({ length: Math.min(20, analysis.rawRows.length) }, (_, i) => (
+                      <option key={i} value={i}>
+                        Linha {i + 1} {i === 8 ? '(Padrão Matriz)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
       )}
 
-      {/* PASSO 2: Mapeamento Inteligente de Colunas */}
+      {/* ETAPA 2: Mapeamento Técnico & Inspeção de Tipagem */}
       {step === 2 && analysis && (
         <Card className="p-6 space-y-6">
-          <CardHeader
-            title="Mapeamento Inteligente de Colunas"
-            subtitle="Confirme ou altere quais colunas da sua planilha correspondem aos campos do sistema"
-          />
+          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <span className="text-[10px] font-mono font-bold text-blue-400 uppercase tracking-wider">
+                ETAPA 02 · MAPEAMENTO ESTRUTURAL
+              </span>
+              <h3 className="text-lg font-bold text-white mt-0.5">
+                Inspeção de Tipos e Associação de Colunas
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Aba ativa: <strong className="text-white">{analysis.selectedSheetName}</strong> · Linha de cabeçalho: <strong className="text-white">{analysis.headerRowIndex + 1}</strong>
+              </p>
+            </div>
 
-          <div className="p-3.5 rounded-xl bg-blue-950/30 border border-blue-500/30 text-xs text-blue-300 flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-blue-400" />
-            <span>
-              O assistente detectou <strong>{analysis.headers.length} colunas</strong> no arquivo <strong>{analysis.fileName}</strong>.
-            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setStep(1)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleProceedToValidation}>
+                Avançar para Conflitos <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
           </div>
 
+          {/* Metadados Corporativos da Cotação (A1:B7) */}
           {analysis.metadata && (analysis.metadata.quotation_number || analysis.metadata.project_name) && (
-            <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-2">
-              <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4" /> Metadados Corporativos Identificados (A1:B7):
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+              <span className="text-[11px] font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" /> Metadados Corporativos Capturados (A1:B7):
               </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                <div><span className="text-slate-400">Cotação:</span> <strong className="text-white block">{analysis.metadata.quotation_number || 'N/A'}</strong></div>
-                <div><span className="text-slate-400">Projeto:</span> <strong className="text-white block">{analysis.metadata.project_name || 'N/A'}</strong></div>
-                <div><span className="text-slate-400">Cliente:</span> <strong className="text-white block">{analysis.metadata.related_client || 'N/A'}</strong></div>
-                <div><span className="text-slate-400">Responsável:</span> <strong className="text-white block">{analysis.metadata.responsible_user_name || 'N/A'}</strong></div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div><span className="text-slate-500 block">Número da Cotação</span><strong className="text-white font-mono">{analysis.metadata.quotation_number || 'N/A'}</strong></div>
+                <div><span className="text-slate-500 block">Projeto Industrial</span><strong className="text-white truncate block">{analysis.metadata.project_name || 'N/A'}</strong></div>
+                <div><span className="text-slate-500 block">Cliente Corporativo</span><strong className="text-white truncate block">{analysis.metadata.related_client || 'N/A'}</strong></div>
+                <div><span className="text-slate-500 block">Comprador Responsável</span><strong className="text-white truncate block">{analysis.metadata.responsible_user_name || 'N/A'}</strong></div>
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            {/* Código MPR */}
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-              <label className="font-bold text-white block">Código MPR (Identificador Único) *</label>
-              <select
-                value={columnMapping.mprCol}
-                onChange={(e) => setColumnMapping({ ...columnMapping, mprCol: parseInt(e.target.value) })}
-                className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2"
-              >
-                {analysis.headers.map((h, i) => (
-                  <option key={i} value={i}>Coluna {String.fromCharCode(65 + i)}: {h || `(Sem cabeçalho - Col ${i + 1})`}</option>
-                ))}
-              </select>
-            </div>
+          {/* Colunas do Sistema de Suprimentos */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider text-slate-400">
+              1. Campos Obrigatórios do Cadastro de Suprimentos
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              {/* MPR */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-white">Código MPR (Identificador Único) *</label>
+                  <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 text-[9px] font-bold">Obrigatório</span>
+                </div>
+                <select
+                  value={columnMapping.mprCol}
+                  onChange={(e) => setColumnMapping({ ...columnMapping, mprCol: parseInt(e.target.value) })}
+                  className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 font-mono text-xs"
+                >
+                  {analysis.headers.map((h, i) => (
+                    <option key={i} value={i}>Coluna {toColLetter(i)}: {h || `(Sem cabeçalho)`}</option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Descrição */}
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-              <label className="font-bold text-white block">Descrição Técnica do Produto *</label>
-              <select
-                value={columnMapping.descCol}
-                onChange={(e) => setColumnMapping({ ...columnMapping, descCol: parseInt(e.target.value) })}
-                className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2"
-              >
-                {analysis.headers.map((h, i) => (
-                  <option key={i} value={i}>Coluna {String.fromCharCode(65 + i)}: {h || `(Col ${i + 1})`}</option>
-                ))}
-              </select>
-            </div>
+              {/* Descrição */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-white">Descrição Técnica do Material *</label>
+                  <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 text-[9px] font-bold">Obrigatório</span>
+                </div>
+                <select
+                  value={columnMapping.descCol}
+                  onChange={(e) => setColumnMapping({ ...columnMapping, descCol: parseInt(e.target.value) })}
+                  className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 font-mono text-xs"
+                >
+                  {analysis.headers.map((h, i) => (
+                    <option key={i} value={i}>Coluna {toColLetter(i)}: {h || `(Sem cabeçalho)`}</option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Quantidade em Barras */}
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-              <label className="font-bold text-white block">Quantidade Necessária (Barras) *</label>
-              <select
-                value={columnMapping.barsCol}
-                onChange={(e) => setColumnMapping({ ...columnMapping, barsCol: parseInt(e.target.value) })}
-                className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2"
-              >
-                {analysis.headers.map((h, i) => (
-                  <option key={i} value={i}>Coluna {String.fromCharCode(65 + i)}: {h || `(Col ${i + 1})`}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Metragem */}
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-              <label className="font-bold text-white block">Metragem Necessária (Metros)</label>
-              <select
-                value={columnMapping.metersCol}
-                onChange={(e) => setColumnMapping({ ...columnMapping, metersCol: parseInt(e.target.value) })}
-                className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2"
-              >
-                <option value={-1}>Calcular automaticamente (Barras × 6.00m)</option>
-                {analysis.headers.map((h, i) => (
-                  <option key={i} value={i}>Coluna {String.fromCharCode(65 + i)}: {h}</option>
-                ))}
-              </select>
+              {/* Qtd Barras */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-white">Demanda em Barras *</label>
+                  <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 text-[9px] font-bold">Obrigatório</span>
+                </div>
+                <select
+                  value={columnMapping.barsCol}
+                  onChange={(e) => setColumnMapping({ ...columnMapping, barsCol: parseInt(e.target.value) })}
+                  className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded-lg p-2 font-mono text-xs"
+                >
+                  {analysis.headers.map((h, i) => (
+                    <option key={i} value={i}>Coluna {toColLetter(i)}: {h || `(Sem cabeçalho)`}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t border-slate-800">
-            <Button variant="outline" onClick={() => setStep(1)}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
-            </Button>
-            <Button variant="primary" onClick={handleProceedToValidation}>
-              Avançar para Higienização <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
+          {/* Colunas Complementares */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider text-slate-400">
+              2. Dimensões, Peso e Premissas Complementares
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              {/* Metragem */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                <label className="font-semibold text-slate-300">Metragem Total (Metros)</label>
+                <select
+                  value={columnMapping.metersCol}
+                  onChange={(e) => setColumnMapping({ ...columnMapping, metersCol: parseInt(e.target.value) })}
+                  className="w-full bg-slate-900 border border-slate-700 text-slate-300 rounded-lg p-2 text-xs"
+                >
+                  <option value={-1}>Calcular automaticamente (Barras × 6.00m)</option>
+                  {analysis.headers.map((h, i) => (
+                    <option key={i} value={i}>Coluna {toColLetter(i)}: {h}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Peso kg */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                <label className="font-semibold text-slate-300">Peso Total / Unitário (kg)</label>
+                <select
+                  value={columnMapping.weightCol}
+                  onChange={(e) => setColumnMapping({ ...columnMapping, weightCol: parseInt(e.target.value) })}
+                  className="w-full bg-slate-900 border border-slate-700 text-slate-300 rounded-lg p-2 text-xs"
+                >
+                  <option value={-1}>Calcular pelo catálogo padrão (16.76 kg/barra)</option>
+                  {analysis.headers.map((h, i) => (
+                    <option key={i} value={i}>Coluna {toColLetter(i)}: {h}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Bitola / Dimensões */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                <label className="font-semibold text-slate-300">Dimensões / Bitola do Perfil</label>
+                <select
+                  value={columnMapping.dimensionsCol}
+                  onChange={(e) => setColumnMapping({ ...columnMapping, dimensionsCol: parseInt(e.target.value) })}
+                  className="w-full bg-slate-900 border border-slate-700 text-slate-300 rounded-lg p-2 text-xs"
+                >
+                  <option value={-1}>Extrair da descrição técnica</option>
+                  {analysis.headers.map((h, i) => (
+                    <option key={i} value={i}>Coluna {toColLetter(i)}: {h}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Grupos de Fornecedores Detectados */}
+          {analysis.detectedSupplierGroups.length > 0 && (
+            <div className="p-4 rounded-xl bg-blue-950/20 border border-blue-500/30 space-y-2">
+              <span className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" /> Fornecedores e Matrizes TCO Detectadas na Planilha:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                {analysis.detectedSupplierGroups.map((g, idx) => (
+                  <div key={idx} className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800">
+                    <strong className="text-white block">{g.supplierName}</strong>
+                    <span className="text-[11px] text-slate-400">
+                      Coluna Preço: {toColLetter(g.priceCol)} {g.tcoCol ? `· TCO: ${toColLetter(g.tcoCol)}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Grade Técnica de Inspeção de Tipos */}
+          <div className="space-y-2 pt-2">
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider text-slate-400">
+              3. Relatório de Tipagem de Colunas Identificadas
+            </h4>
+            <div className="overflow-x-auto border border-slate-800 rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800">
+                    <th className="py-2.5 px-3">Coluna</th>
+                    <th className="py-2.5 px-3">Cabeçalho da Planilha</th>
+                    <th className="py-2.5 px-3">Tipo Inferido</th>
+                    <th className="py-2.5 px-3">Completude</th>
+                    <th className="py-2.5 px-3">Amostras de Dados (Linhas Iniciais)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80">
+                  {analysis.columnTypes.slice(0, 15).map((col) => (
+                    <tr key={col.index} className="hover:bg-slate-800/30">
+                      <td className="py-2 px-3 font-mono font-bold text-blue-400">{col.letter}</td>
+                      <td className="py-2 px-3 text-white font-medium truncate max-w-[200px]">{col.header}</td>
+                      <td className="py-2 px-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          col.inferredType === 'NUMÉRICO' ? 'bg-emerald-500/20 text-emerald-300' :
+                          col.inferredType === 'MOEDA' ? 'bg-amber-500/20 text-amber-300' :
+                          col.inferredType === 'PERCENTUAL' ? 'bg-purple-500/20 text-purple-300' :
+                          col.inferredType === 'VAZIO' ? 'bg-slate-800 text-slate-400' :
+                          'bg-blue-500/20 text-blue-300'
+                        }`}>
+                          {col.inferredType}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-slate-400 font-mono text-[11px]">{col.completenessPercent}%</td>
+                      <td className="py-2 px-3 text-slate-300 font-mono text-[11px] truncate max-w-[280px]">
+                        {col.sampleValues.join(' | ') || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </Card>
       )}
 
-      {/* PASSO 3: Higienização & Estratégia de Conflito */}
+      {/* ETAPA 3: Governança Cadastral & Resolução de Conflitos */}
       {step === 3 && (
         <Card className="p-6 space-y-6">
-          <CardHeader
-            title="Higienização de Dados & Resolução de Conflitos"
-            subtitle="Defina como o sistema deve tratar produtos que já constam no banco de dados"
-          />
+          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">
+                ETAPA 03 · GOVERNANÇA E CONFLITOS
+              </span>
+              <h3 className="text-lg font-bold text-white mt-0.5">
+                Resolução Cadastral de Produtos e Higienização
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Defina as regras de atualização de itens já cadastrados e confira os padrões de sanitização.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setStep(2)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Voltar ao Mapeamento
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleProceedToPreview}>
+                Homologar Pré-Voo <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
 
           <div className="space-y-4">
+            {/* Política de Sobrescrita */}
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex items-start justify-between gap-4">
-              <div>
-                <h4 className="font-bold text-white text-sm">Atualizar dados dos produtos existentes</h4>
-                <p className="text-xs text-slate-400 mt-1">
-                  Se um produto com o mesmo Código MPR já existir no sistema, suas especificações e dimensões serão atualizadas com os dados mais recentes desta planilha.
+              <div className="space-y-1">
+                <h4 className="font-bold text-white text-sm">Atualizar dados dos produtos existentes (Upsert por Código MPR)</h4>
+                <p className="text-xs text-slate-400">
+                  Caso o código MPR já conste no catálogo da organização, as especificações técnicas, dimensões e materiais serão atualizados com os valores desta planilha.
                 </p>
               </div>
               <input
                 type="checkbox"
                 checked={updateExistingProducts}
                 onChange={(e) => setUpdateExistingProducts(e.target.checked)}
-                className="w-5 h-5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                className="w-5 h-5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500 cursor-pointer mt-0.5"
               />
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
-              <h4 className="font-bold text-white text-sm mb-2">Higienização Numérica Automática Ativada</h4>
-              <ul className="text-xs text-slate-300 space-y-1 list-disc list-inside">
-                <li>Conversão de vírgulas decimais brasileiras (ex: 451,71 $\rightarrow$ 451.71).</li>
-                <li>Remoção de prefixos monetários (R$, R$ 120,00).</li>
-                <li>Sanitização contra injeção de scripts e caracteres perigosos.</li>
-              </ul>
+            {/* Checklist de Higienização */}
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
+              <h4 className="font-bold text-white text-xs uppercase tracking-wider text-slate-400">
+                Regras Ativas do Motor de Higienização Numérica:
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-300">
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Conversão de vírgula decimal brasileira (ex: 451,71 $\rightarrow$ 451.71)</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Remoção automática de cifrão e caracteres monetários (R$)</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Cálculo padrão de metragem linear para perfis de 6,00 metros</span>
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Sanitização contra injeção e caracteres não-imprimíveis</span>
+                </div>
+              </div>
             </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-4 border-t border-slate-800">
-            <Button variant="outline" onClick={() => setStep(2)}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Voltar ao Mapeamento
-            </Button>
-            <Button variant="primary" onClick={handleProceedToPreview}>
-              Ver Prévia Executiva <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
           </div>
         </Card>
       )}
 
-      {/* PASSO 4: Prévia & Confirmação */}
+      {/* ETAPA 4: Homologação Pré-Voo & Prévia Executiva */}
       {step === 4 && (
-        <div className="space-y-6">
+        <div className="space-y-4">
+          {/* Card Resumo de Impacto */}
           <Card className="p-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
-                  Impacto da Importação
+                <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider">
+                  HOMOLOGAÇÃO PRÉ-VOO CONCLUÍDA
                 </span>
                 <h3 className="text-lg font-bold text-white mt-0.5">{analysis?.fileName}</h3>
                 <div className="flex flex-wrap gap-4 text-xs text-slate-300 mt-2">
-                  <span>Total de Itens: <strong className="text-white">{processedRows.length}</strong></span>
-                  <span>Novos Cadastros: <strong className="text-emerald-400">{processedRows.filter(r => !r.isExisting).length}</strong></span>
-                  <span>Produtos Existentes: <strong className="text-blue-400">{processedRows.filter(r => r.isExisting).length}</strong></span>
+                  <span>Total de Itens: <strong className="text-white font-mono">{countTotal}</strong></span>
+                  <span>Íntegros: <strong className="text-emerald-400 font-mono">{countValid}</strong></span>
+                  <span>Avisos: <strong className="text-amber-400 font-mono">{countWarnings}</strong></span>
+                  <span>Novos Cadastros: <strong className="text-blue-400 font-mono">{countNew}</strong></span>
+                  <span>Atualizações: <strong className="text-purple-400 font-mono">{countExisting}</strong></span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <Button variant="outline" onClick={() => setStep(3)}>
-                  Voltar
+              <div className="flex items-center gap-2.5">
+                <Button variant="outline" size="sm" onClick={() => setStep(3)}>
+                  <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
                 </Button>
-                <Button variant="primary" icon={<Check className="w-4 h-4" />} onClick={handleFinalImport}>
-                  Confirmar & Gerar Cotação
+                <Button
+                  variant="primary"
+                  icon={<Check className="w-4 h-4" />}
+                  onClick={handleFinalImport}
+                >
+                  Homologar & Inserir Cotação
                 </Button>
               </div>
             </div>
           </Card>
 
-          {/* Filtros da Tabela de Prévia */}
-          <div className="flex gap-2">
+          {/* Filtros da Tabela */}
+          <div className="flex flex-wrap gap-2 text-xs">
             {[
-              { id: 'all', label: `Todos (${processedRows.length})` },
-              { id: 'new', label: `Novos (${processedRows.filter(r => !r.isExisting).length})` },
-              { id: 'existing', label: `Existentes (${processedRows.filter(r => r.isExisting).length})` },
+              { id: 'all', label: `Todos os Itens (${countTotal})` },
+              { id: 'valid', label: `100% Válidos (${countValid})` },
+              { id: 'warnings', label: `Com Advertências (${countWarnings})` },
+              { id: 'new', label: `Novos no Catálogo (${countNew})` },
+              { id: 'existing', label: `Itens Existentes (${countExisting})` }
             ].map((f) => (
               <button
                 key={f.id}
+                type="button"
                 onClick={() => setPreviewFilter(f.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
                   previewFilter === f.id
-                    ? 'bg-blue-600 text-white shadow'
+                    ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
@@ -699,45 +1006,67 @@ export const ExcelImportPage: React.FC<ExcelImportPageProps> = ({ onNavigate, on
             ))}
           </div>
 
-          {/* Tabela de Pré-visualização */}
+          {/* Tabela de Alta Densidade da Prévia */}
           <Card className="p-0 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800">
-                    <th className="py-2.5 px-3">Linha</th>
+                    <th className="py-2.5 px-3 font-mono">Linha</th>
                     <th className="py-2.5 px-3">Código MPR</th>
-                    <th className="py-2.5 px-3">Descrição Técnica</th>
+                    <th className="py-2.5 px-3">Descrição Técnica do Material</th>
                     <th className="py-2.5 px-3 text-center">Barras</th>
                     <th className="py-2.5 px-3 text-center">Metros</th>
-                    <th className="py-2.5 px-3 text-center">Cotações</th>
-                    <th className="py-2.5 px-3 text-center">Ação no Banco</th>
+                    <th className="py-2.5 px-3 text-center">Peso Total</th>
+                    <th className="py-2.5 px-3 text-center">Propostas</th>
+                    <th className="py-2.5 px-3 text-center">Ação Cadastral</th>
+                    <th className="py-2.5 px-3 text-right">Diagnóstico</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {filteredPreviewRows.map((r, idx) => (
-                    <tr key={idx} className="hover:bg-slate-800/40">
-                      <td className="py-2.5 px-3 font-mono text-slate-500">{r.rowNumber}</td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-blue-400">{r.codigo_mpr}</td>
-                      <td className="py-2.5 px-3 text-white font-medium">{r.description}</td>
-                      <td className="py-2.5 px-3 text-center font-bold text-slate-200">{r.quantity_bars}</td>
-                      <td className="py-2.5 px-3 text-center text-slate-400">{r.quantity_meters} m</td>
-                      <td className="py-2.5 px-3 text-center font-mono text-slate-300">
-                        {r.supplierQuotes.length} fornecedor(es)
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        {r.isExisting ? (
-                          <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-bold">
-                            {updateExistingProducts ? 'Atualiza Cadastro' : 'Mantém Atual'}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                            Novo Produto
-                          </span>
-                        )}
+                  {filteredPreviewRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-500">
+                        Nenhum item localizado no filtro selecionado.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredPreviewRows.map((r, idx) => (
+                      <tr key={idx} className="hover:bg-slate-800/40">
+                        <td className="py-2 px-3 font-mono text-slate-500">{r.rowNumber}</td>
+                        <td className="py-2 px-3 font-mono font-bold text-blue-400">{r.codigo_mpr}</td>
+                        <td className="py-2 px-3 text-white font-medium max-w-[280px] truncate">{r.description}</td>
+                        <td className="py-2 px-3 text-center font-bold text-slate-200">{r.quantity_bars}</td>
+                        <td className="py-2 px-3 text-center text-slate-400 font-mono">{r.quantity_meters.toFixed(2)} m</td>
+                        <td className="py-2 px-3 text-center text-slate-400 font-mono">{r.estimated_weight_kg.toFixed(1)} kg</td>
+                        <td className="py-2 px-3 text-center font-mono text-slate-300">
+                          {r.supplierQuotes.length} cotados
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          {r.isExisting ? (
+                            <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-bold">
+                              {updateExistingProducts ? 'Atualiza Cadastro' : 'Mantém Atual'}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                              Novo Produto
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-right">
+                          {r.status === 'ERROR' ? (
+                            <span className="text-[10px] text-rose-400 font-semibold">{r.validationErrors[0]}</span>
+                          ) : r.status === 'WARNING' ? (
+                            <span className="text-[10px] text-amber-400 font-semibold">{r.validationWarnings[0]}</span>
+                          ) : (
+                            <span className="text-[10px] text-emerald-400 font-semibold flex items-center justify-end gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Válido
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

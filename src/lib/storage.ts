@@ -956,6 +956,26 @@ class LocalStorageManager {
     return updatedUser;
   }
 
+  deleteUser(id: string): void {
+    const users = this.getUsers().filter((u) => u.id !== id);
+    this.setItem(STORAGE_KEYS.USERS, users);
+  }
+
+  updateUser(id: string, updates: Partial<UserProfile>): UserProfile | null {
+    const users = this.getUsers();
+    const index = users.findIndex((u) => u.id === id);
+    if (index === -1) return null;
+    const updated: UserProfile = {
+      ...users[index],
+      ...updates,
+      role: 'ADMIN', // preserva papel administrativo corporativo
+      updated_at: new Date().toISOString(),
+    };
+    users[index] = updated;
+    this.setItem(STORAGE_KEYS.USERS, users);
+    return updated;
+  }
+
   verifyCredentials(email: string, password?: string): { success: boolean; user?: UserProfile; error?: string } {
     const cleanEmail = email.trim().toLowerCase();
     const user = this.findUserByEmail(cleanEmail);

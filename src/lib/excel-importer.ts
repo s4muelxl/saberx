@@ -28,6 +28,15 @@ export interface ParsedSupplierColumnGroup {
   icmsCol?: number;
 }
 
+export interface ColumnTypeInfo {
+  index: number;
+  letter: string;
+  header: string;
+  inferredType: 'TEXTO' | 'NUMÉRICO' | 'MOEDA' | 'PERCENTUAL' | 'VAZIO';
+  sampleValues: string[];
+  completenessPercent: number;
+}
+
 export interface EnterpriseImportRow {
   rowNumber: number;
   codigo_mpr: string;
@@ -40,6 +49,7 @@ export interface EnterpriseImportRow {
   category?: string;
   reference_price?: number;
   isExisting: boolean;
+  status: 'VALID' | 'WARNING' | 'ERROR';
   validationErrors: string[];
   validationWarnings: string[];
   supplierQuotes: Array<{
@@ -82,7 +92,9 @@ export interface EnterpriseWorkbookAnalysis {
   rawRows: any[][];
   suggestedMapping: ColumnMapping;
   detectedSupplierGroups: ParsedSupplierColumnGroup[];
+  columnTypes: ColumnTypeInfo[];
   metadata?: QuotationImportMetadata;
+  arrayBuffer?: ArrayBuffer;
 }
 
 // Dicionário de sinônimos em português para mapeamento inteligente
@@ -96,6 +108,74 @@ const SYNONYMS = {
   material: ['AÇO', 'ACO', 'NORMA', 'SAE', 'ASTM', 'TIPO AÇO'],
   refPrice: ['BUDGET', 'PREÇO REF', 'PRECO REF', 'REFERÊNCIA', 'REFERENCIA', 'VALOR REF', 'R$/KG', 'TETO']
 };
+
+export function toColLetter(idx: number): string {
+  let temp: number;
+  let letter = '';
+  idx += 1;
+  while (idx > 0) {
+    temp = (idx - 1) % 26;
+    letter = String.fromCharCode(temp + 65) + letter;
+    idx = Math.floor((idx - temp - 1) / 26);
+  }
+  return letter;
+}
+
+export function inferColumnTypes(rawRows: any[][], headers: string[], headerRowIndex: number): ColumnTypeInfo[] {
+  const result: ColumnTypeInfo[] = [];
+  const maxScanRows = Math.min(rawRows.length, headerRowIndex + 30);
+  const dataRowsCount = Math.max(0, maxScanRows - headerRowIndex - 1);
+
+  for (let c = 0; c < headers.length; c++) {
+    const samples: string[] = [];
+    let nonEmptyCount = 0;
+    let numericCount = 0;
+    let currencyCount = 0;
+    let percentCount = 0;
+
+    for (let r = headerRowIndex + 1; r < maxScanRows; r++) {
+      const val = rawRows[r]?.[c];
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        nonEmptyCount++;
+        const s = String(val).trim();
+        if (samples.length < 3) samples.push(s);
+
+        if (s.includes('R$') || (s.includes(',') && !isNaN(Number(s.replace('R$', '').replace(/\./g, '').replace(',', '.').trim())))) {
+          currencyCount++;
+        }
+        if (s.includes('%')) {
+          percentCount++;
+        }
+        const parsed = Number(String(val).replace(',', '.'));
+        if (!isNaN(parsed) && typeof val === 'number') {
+          numericCount++;
+        }
+      }
+    }
+
+    let inferredType: ColumnTypeInfo['inferredType'] = 'TEXTO';
+    if (nonEmptyCount === 0) {
+      inferredType = 'VAZIO';
+    } else if (currencyCount > 0 && currencyCount / nonEmptyCount > 0.4) {
+      inferredType = 'MOEDA';
+    } else if (percentCount > 0 && percentCount / nonEmptyCount > 0.4) {
+      inferredType = 'PERCENTUAL';
+    } else if ((numericCount + currencyCount) / nonEmptyCount > 0.5) {
+      inferredType = 'NUMÉRICO';
+    }
+
+    result.push({
+      index: c,
+      letter: toColLetter(c),
+      header: headers[c] || `(Coluna ${c + 1})`,
+      inferredType,
+      sampleValues: samples,
+      completenessPercent: dataRowsCount > 0 ? Math.round((nonEmptyCount / dataRowsCount) * 100) : 0,
+    });
+  }
+
+  return result;
+}
 
 function findBestColumn(headers: string[], synonymsList: string[]): number {
   for (let i = 0; i < headers.length; i++) {
@@ -111,14 +191,25 @@ function findBestColumn(headers: string[], synonymsList: string[]): number {
 
 /**
  * Lê e analisa a pasta de trabalho Excel (Workbook)
- * Extrai automaticamente metadados do cabeçalho corporativo A1:B7
+ * Suporta seleção de abas dinâmicas e redefinição de linha de cabeçalho
  */
-export async function analyzeExcelWorkbook(file: File): Promise<EnterpriseWorkbookAnalysis> {
-  const buffer = await file.arrayBuffer();
+export async function analyzeExcelWorkbook(
+  source: File | ArrayBuffer,
+  options?: {
+    targetSheetName?: string;
+    customHeaderRowIndex?: number;
+    fileName?: string;
+    fileSize?: number;
+  }
+): Promise<EnterpriseWorkbookAnalysis> {
+  const buffer = source instanceof File ? await source.arrayBuffer() : source;
+  const fileName = options?.fileName || (source instanceof File ? source.name : 'planilha_importada.xlsx');
+  const fileSize = options?.fileSize || (source instanceof File ? source.size : buffer.byteLength);
+
   const workbook = XLSX.read(buffer, { type: 'array' });
 
   if (workbook.SheetNames.length === 0) {
-    throw new Error('A planilha está vazia.');
+    throw new Error('A planilha selecionada está vazia.');
   }
 
   const sheets: SheetInfo[] = workbook.SheetNames.map((name) => {
@@ -131,12 +222,15 @@ export async function analyzeExcelWorkbook(file: File): Promise<EnterpriseWorkbo
     };
   });
 
-  // Prefere a aba principal de cotação caso exista
-  const preferredSheet = workbook.SheetNames.find(
-    (n) => n.includes('MAPA') || n.includes('COTACAO') || n.includes('COTAÇÃO') || n.includes('SABERX')
-  ) || workbook.SheetNames[0];
+  // Define aba alvo (passada por parâmetro ou deduzida inteligentemente)
+  const selectedSheetName =
+    options?.targetSheetName && workbook.SheetNames.includes(options.targetSheetName)
+      ? options.targetSheetName
+      : workbook.SheetNames.find(
+          (n) => n.includes('MAPA') || n.includes('COTACAO') || n.includes('COTAÇÃO') || n.includes('SABERX')
+        ) || workbook.SheetNames[0];
 
-  const sheet = workbook.Sheets[preferredSheet];
+  const sheet = workbook.Sheets[selectedSheetName];
   const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
   // Extrai Metadados Corporativos (A1:B7)
@@ -162,20 +256,22 @@ export async function analyzeExcelWorkbook(file: File): Promise<EnterpriseWorkbo
     }
   }
 
-  // Localiza a linha mais provável de ser o cabeçalho dos itens (varre até a linha 15)
-  let headerRowIndex = 0;
-  for (let r = 0; r < Math.min(rawRows.length, 15); r++) {
-    const lineStr = rawRows[r].map((c) => String(c).toUpperCase()).join(' ');
-    if (
-      lineStr.includes('MPR') ||
-      lineStr.includes('CÓDIGO') ||
-      lineStr.includes('CODIGO') ||
-      lineStr.includes('DESCRIÇÃO') ||
-      lineStr.includes('DESCRICAO') ||
-      (lineStr.includes('ITEM') && lineStr.includes('BARRAS'))
-    ) {
-      headerRowIndex = r;
-      break;
+  // Localiza a linha mais provável de ser o cabeçalho dos itens (varre até a linha 15) ou usa customHeaderRowIndex
+  let headerRowIndex = options?.customHeaderRowIndex !== undefined ? options.customHeaderRowIndex : 0;
+  if (options?.customHeaderRowIndex === undefined) {
+    for (let r = 0; r < Math.min(rawRows.length, 15); r++) {
+      const lineStr = rawRows[r].map((c) => String(c).toUpperCase()).join(' ');
+      if (
+        lineStr.includes('MPR') ||
+        lineStr.includes('CÓDIGO') ||
+        lineStr.includes('CODIGO') ||
+        lineStr.includes('DESCRIÇÃO') ||
+        lineStr.includes('DESCRICAO') ||
+        (lineStr.includes('ITEM') && lineStr.includes('BARRAS'))
+      ) {
+        headerRowIndex = r;
+        break;
+      }
     }
   }
 
@@ -245,17 +341,21 @@ export async function analyzeExcelWorkbook(file: File): Promise<EnterpriseWorkbo
     }
   }
 
+  const columnTypes = inferColumnTypes(rawRows, headers, headerRowIndex);
+
   return {
-    fileName: file.name,
-    fileSize: file.size,
+    fileName,
+    fileSize,
     sheets,
-    selectedSheetName: preferredSheet,
+    selectedSheetName,
     headers,
     headerRowIndex,
     rawRows,
     suggestedMapping,
     detectedSupplierGroups,
-    metadata
+    columnTypes,
+    metadata,
+    arrayBuffer: buffer
   };
 }
 
@@ -343,6 +443,9 @@ export function processMappedExcelRows(
       }
     });
 
+    const status: EnterpriseImportRow['status'] =
+      validationErrors.length > 0 ? 'ERROR' : (validationWarnings.length > 0 ? 'WARNING' : 'VALID');
+
     processed.push({
       rowNumber: r + 1,
       codigo_mpr: mprRaw,
@@ -354,6 +457,7 @@ export function processMappedExcelRows(
       material,
       reference_price: refPrice,
       isExisting,
+      status,
       validationErrors,
       validationWarnings,
       supplierQuotes
@@ -363,20 +467,6 @@ export function processMappedExcelRows(
   return processed;
 }
 
-/**
- * Converte índice de coluna em letra Excel (0 -> A, 1 -> B...)
- */
-function toColLetter(idx: number): string {
-  let temp: number;
-  let letter = '';
-  idx += 1;
-  while (idx > 0) {
-    temp = (idx - 1) % 26;
-    letter = String.fromCharCode(temp + 65) + letter;
-    idx = Math.floor((idx - temp - 1) / 26);
-  }
-  return letter;
-}
 
 /**
  * Gera e faz download da planilha modelo oficial SaberX (.xlsx)

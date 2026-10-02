@@ -20,8 +20,7 @@ interface AuthContextType {
   setCloudSync: (enabled: boolean) => void;
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, password: string, data: SignUpData) => Promise<{ success: boolean; error?: string }>;
-  loginWithGoogle: (customEmail?: string, customName?: string) => Promise<{ success: boolean; error?: string }>;
-  loginAsDemo: (role?: UserRole) => Promise<{ success: boolean }>;
+  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   switchUserRole: (newRole: UserRole) => void;
@@ -35,53 +34,109 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(() => {
     return localStore.getCurrentUser();
   });
-  const [authReady, setAuthReady] = useState(true);
 
   const setCloudSync = (enabled: boolean) => {
     setCloudSyncEnabled(enabled);
     setCloudSyncState(enabled);
   };
 
+  const fetchAndSetUserProfile = async (userId: string, email?: string, fullNameMetadata?: string) => {
+    try {
+      if (isSupabaseConfigured()) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (profile) {
+          const loadedUser: UserProfile = { ...(profile as UserProfile), role: 'ADMIN' };
+          setUser(loadedUser);
+          localStore.setCurrentUser(loadedUser);
+          localStore.saveUser(loadedUser);
+          return;
+        }
+      }
+
+      // Se perfil ainda não existir no Supabase ou offline, inicializa perfil corporativo ADMIN
+      if (email) {
+        const existingLocal = localStore.findUserByEmail(email);
+        const corporateName = fullNameMetadata || existingLocal?.full_name || email.split('@')[0].toUpperCase();
+
+        const fallbackProfile: UserProfile = {
+          id: userId || existingLocal?.id || `usr-${Date.now()}`,
+          organization_id: DEMO_ORG_ID,
+          organization_name: existingLocal?.organization_name || 'SaberX Metais & Suprimentos',
+          full_name: corporateName,
+          email: email.toLowerCase().trim(),
+          position: existingLocal?.position || 'Administrador Corporativo',
+          department: existingLocal?.department || 'Diretoria & Suprimentos',
+          role: 'ADMIN',
+          is_active: true,
+          created_at: existingLocal?.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        if (isSupabaseConfigured()) {
+          try {
+            await supabase.from('profiles').upsert([fallbackProfile]);
+          } catch {
+            // Ignora se tabela ou rede indisponível
+          }
+        }
+
+        setUser(fallbackProfile);
+        localStore.setCurrentUser(fallbackProfile);
+        localStore.saveUser(fallbackProfile);
+      }
+    } catch (e) {
+      console.warn('Operando com armazenamento local resiliente:', e);
+    }
+  };
+
   useEffect(() => {
     localStore.init();
 
-    // Se houver sessão na URL por redirect OAuth (Google)
-    if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
-      try {
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const accessToken = hashParams.get('access_token');
-        if (accessToken) {
-          // Extrai informações do token ou busca sessão
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session?.user) {
-              fetchAndSetUserProfile(session.user.id, session.user.email);
+    // 1. Detecção automática de retorno do OAuth Google (hash ou code da URL)
+    if (typeof window !== 'undefined' && isSupabaseConfigured()) {
+      if (window.location.hash.includes('access_token') || window.location.search.includes('code=')) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            const metaName = session.user.user_metadata?.full_name || session.user.user_metadata?.name;
+            fetchAndSetUserProfile(session.user.id, session.user.email, metaName);
+            // Limpa tokens sensíveis da URL para higiene de segurança
+            if (window.history && window.history.replaceState) {
+              window.history.replaceState(null, '', window.location.pathname);
             }
-          }).catch(() => {});
-        }
-      } catch {
-        // Ignora erro de parse de hash
+          }
+        }).catch((err) => {
+          console.warn('Erro ao processar retorno OAuth do Google:', err);
+        });
       }
     }
 
-    // Se sincronização em nuvem estiver ativada, tenta verificar sessão de forma não bloqueante
-    if (cloudSync && isSupabaseConfigured()) {
+    // 2. Monitoramento de estado de autenticação Supabase
+    if (isSupabaseConfigured()) {
       const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000));
       Promise.race([
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session?.user) {
-            fetchAndSetUserProfile(session.user.id, session.user.email);
+            const metaName = session.user.user_metadata?.full_name || session.user.user_metadata?.name;
+            fetchAndSetUserProfile(session.user.id, session.user.email, metaName);
           }
         }),
         timeoutPromise,
       ]).catch(() => {
-        // Falha silenciosa de conexão com Supabase — mantém usuário do localStorage
+        // Fallback para usuário do localStore
       });
 
       const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (session?.user) {
-          await fetchAndSetUserProfile(session.user.id, session.user.email);
+        if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+          const metaName = session.user.user_metadata?.full_name || session.user.user_metadata?.name;
+          await fetchAndSetUserProfile(session.user.id, session.user.email, metaName);
         } else if (event === 'SIGNED_OUT') {
-          // Desconecta se explícito
+          localStore.setCurrentUser(null);
+          setUser(null);
         }
       });
 
@@ -91,55 +146,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [cloudSync]);
 
-  const fetchAndSetUserProfile = async (userId: string, email?: string) => {
-    try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (profile) {
-        setUser(profile as UserProfile);
-        localStore.setCurrentUser(profile as UserProfile);
-      } else if (email) {
-        const fallbackProfile: UserProfile = {
-          id: userId,
-          organization_id: DEMO_ORG_ID,
-          full_name: email.split('@')[0].toUpperCase(),
-          email: email,
-          role: 'ADMIN',
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        try {
-          await supabase.from('profiles').insert([fallbackProfile]);
-        } catch {
-          // Ignora se offline
-        }
-        setUser(fallbackProfile);
-        localStore.setCurrentUser(fallbackProfile);
-      }
-    } catch (e) {
-      console.warn('Erro ao carregar perfil do Supabase (operando localmente):', e);
-    }
-  };
-
   const login = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail) {
-      return { success: false, error: 'Por favor, informe seu endereço de e-mail.' };
+      return { success: false, error: 'Por favor, informe seu endereço de e-mail corporativo.' };
     }
 
     if (!password) {
       return { success: false, error: 'A senha é obrigatória.' };
     }
 
-    // 1. Se sincronização em nuvem estiver ativada com servidor real configurado
-    if (cloudSync && isSupabaseConfigured()) {
+    // 1. Tentativa de login via Supabase se configurado
+    if (isSupabaseConfigured()) {
       try {
         const supabaseLoginPromise = supabase.auth.signInWithPassword({
           email: cleanEmail,
@@ -147,13 +166,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         const timeoutPromise = new Promise<{ data: any; error: any }>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de conexão com o Supabase')), 3500)
+          setTimeout(() => reject(new Error('Timeout de conexão com o servidor de autenticação.')), 3500)
         );
 
-        const { data } = await Promise.race([supabaseLoginPromise, timeoutPromise]);
+        const { data, error } = await Promise.race([supabaseLoginPromise, timeoutPromise]);
 
-        if (data?.user) {
+        if (error) {
+          // Se o servidor respondeu com erro explícito de credencial
+          if (error.message.includes('Invalid login credentials')) {
+            // Continua para verificar credencial local antes de rejeitar
+          } else {
+            console.warn('Supabase Auth error:', error.message);
+          }
+        } else if (data?.user) {
           await fetchAndSetUserProfile(data.user.id, data.user.email);
+          localStore.logAudit({
+            organization_id: DEMO_ORG_ID,
+            user_id: data.user.id,
+            user_name: data.user.email,
+            action: 'LOGIN_AUTORIZADO',
+            entity: 'auth',
+            entity_id: data.user.id,
+            reason: 'Autenticação bem-sucedida via Supabase Cloud Auth',
+          });
           return { success: true };
         }
       } catch (err) {
@@ -161,21 +196,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // 2. Autenticação Local Resiliente (Offline-First)
+    // 2. Autenticação Local Resiliente (Offline-First Enterprise)
     const localResult = localStore.verifyCredentials(cleanEmail, password);
     if (localResult.success && localResult.user) {
       const adminUser: UserProfile = { ...localResult.user, role: 'ADMIN' };
       setUser(adminUser);
       localStore.setCurrentUser(adminUser);
+      localStore.logAudit({
+        organization_id: adminUser.organization_id || DEMO_ORG_ID,
+        user_id: adminUser.id,
+        user_name: adminUser.full_name,
+        action: 'LOGIN_AUTORIZADO',
+        entity: 'auth',
+        entity_id: adminUser.id,
+        reason: 'Autenticação bem-sucedida com credenciais corporativas registradas',
+      });
       return { success: true };
     }
 
-    // Se o usuário ainda não existia no cadastro local, mas forneceu senha válida (>= 6 dígitos)
-    // cria a conta corporativa de primeiro acesso com papel ADMIN
+    // Primeiro acesso corporativo automático se credenciais forem fornecidas com padrão seguro (>= 6 chars)
     if (password.length >= 6) {
       const newUser: UserProfile = {
         id: `usr-${Date.now()}`,
         organization_id: DEMO_ORG_ID,
+        organization_name: 'SaberX Metais & Suprimentos',
         full_name: cleanEmail.split('@')[0].toUpperCase(),
         email: cleanEmail,
         position: 'Administrador Corporativo',
@@ -189,6 +233,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStore.saveUser(newUser, password);
       setUser(newUser);
       localStore.setCurrentUser(newUser);
+      localStore.logAudit({
+        organization_id: DEMO_ORG_ID,
+        user_id: newUser.id,
+        user_name: newUser.full_name,
+        action: 'PRIMEIRO_ACESSO_ADMIN',
+        entity: 'auth',
+        entity_id: newUser.id,
+        reason: 'Primeiro acesso corporativo registrado com perfil de Administrador',
+      });
       return { success: true };
     }
 
@@ -209,171 +262,182 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Informe um e-mail válido.' };
     }
     if (!password || password.length < 6) {
-      return { success: false, error: 'A senha deve conter pelo menos 6 caracteres.' };
+      return { success: false, error: 'A senha corporativa deve conter pelo menos 6 caracteres.' };
+    }
+    if (!data.fullName.trim()) {
+      return { success: false, error: 'Nome completo é obrigatório.' };
+    }
+    if (!data.companyName.trim()) {
+      return { success: false, error: 'Razão social da empresa é obrigatória.' };
     }
 
     // Cria perfil do usuário garantindo papel ADMIN para acesso total
     const profile: UserProfile = {
       id: `usr-${Date.now()}`,
       organization_id: DEMO_ORG_ID,
-      full_name: data.fullName,
+      organization_name: data.companyName.trim(),
+      full_name: data.fullName.trim(),
       email: cleanEmail,
-      position: data.position || 'Administrador do Sistema',
-      department: data.department || 'Diretoria & Suprimentos',
+      position: data.position?.trim() || 'Administrador de Suprimentos',
+      department: data.department?.trim() || 'Diretoria & Suprimentos',
       role: 'ADMIN',
       is_active: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Persiste o novo usuário no armazenamento seguro
-    localStore.saveUser(profile, password);
-    setUser(profile);
-    localStore.setCurrentUser(profile);
-
-    // 2. Conforme solicitado: ZERA todas as informações anteriores (cotações, pedidos, orçamentos) para nova conta
-    localStore.resetWorkspaceForNewUser(data.companyName, profile);
-
-    // 3. Se Supabase estiver ativado e configurado, sincroniza em segundo plano
-    if (cloudSync && isSupabaseConfigured()) {
+    // 1. Se sincronização com Supabase estiver configurada, cadastra no Supabase Auth
+    if (isSupabaseConfigured()) {
       try {
-        supabase.auth.signUp({
+        const { data: authData, error: sbError } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
           options: {
             data: {
-              full_name: data.fullName,
-              company_name: data.companyName,
-              position: data.position,
-              department: data.department,
+              full_name: data.fullName.trim(),
+              company_name: data.companyName.trim(),
+              position: data.position?.trim(),
+              department: data.department?.trim(),
               role: 'ADMIN',
             },
           },
-        }).then(async ({ data: authData, error }) => {
-          if (authData?.user && !error) {
-            try {
-              await supabase.from('profiles').upsert([{
-                ...profile,
-                id: authData.user.id,
-              }]);
-            } catch {
-              // Ignora se offline
-            }
+        });
+
+        if (sbError) {
+          if (sbError.message.includes('User already registered') || sbError.message.includes('already exists')) {
+            return {
+              success: false,
+              error: 'Este e-mail corporativo já possui cadastro ativo no sistema. Faça login ou recupere sua senha.',
+            };
           }
-        }).catch(() => {});
-      } catch (err) {
-        console.warn('Erro ao sincronizar novo cadastro no Supabase:', err);
+          console.warn('Aviso Supabase SignUp:', sbError.message);
+        } else if (authData?.user) {
+          profile.id = authData.user.id;
+          try {
+            await supabase.from('profiles').upsert([profile]);
+          } catch {
+            // Ignora se tabela offline
+          }
+        }
+      } catch (err: any) {
+        console.warn('Erro ao sincronizar cadastro no Supabase:', err);
       }
     }
 
+    // 2. Persiste localmente com senha
+    localStore.saveUser(profile, password);
+    setUser(profile);
+    localStore.setCurrentUser(profile);
+
+    // 3. Zera todas as informações de demonstração/anteriores para nova conta limpa
+    localStore.resetWorkspaceForNewUser(data.companyName.trim(), profile);
+
     return { success: true };
   };
 
-  const loginWithGoogle = async (
-    customEmail?: string,
-    customName?: string
-  ): Promise<{ success: boolean; error?: string }> => {
-    // Autenticação Google Corporativa Instantânea & Segura (Zero Redirects Quebrados)
-    const email = (customEmail || 'corporativo.google@saberx.com.br').trim().toLowerCase();
-    const name = customName || (email.split('@')[0].toUpperCase());
+  /**
+   * Integração Google OAuth Real (Zero Mocks)
+   * Redireciona para o provedor oficial do Google via Supabase Auth
+   */
+  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+    if (!isSupabaseConfigured()) {
+      return {
+        success: false,
+        error:
+          'A autenticação via Google OAuth requer que as credenciais do Supabase (VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY) estejam configuradas nas Configurações do Sistema ou no arquivo de ambiente (.env), com o provedor Google ativo no console do projeto.',
+      };
+    }
 
-    const isExisting = localStore.findUserByEmail(email);
+    try {
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
 
-    const googleUser: UserProfile = {
-      id: isExisting?.id || `usr-google-${Date.now()}`,
-      organization_id: DEMO_ORG_ID,
-      full_name: isExisting?.full_name || name,
-      email: email,
-      role: 'ADMIN',
-      position: isExisting?.position || 'Administrador Google Workspace',
-      department: isExisting?.department || 'Diretoria Corporativa',
-      is_active: true,
-      created_at: isExisting?.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+      if (oauthError) {
+        return { success: false, error: oauthError.message };
+      }
 
-    localStore.saveUser(googleUser, 'google-oauth-authenticated');
-    setUser(googleUser);
-    localStore.setCurrentUser(googleUser);
-    return { success: true };
-  };
+      if (data?.url) {
+        // Redireciona o navegador para a tela oficial de login do Google
+        window.location.href = data.url;
+        return { success: true };
+      }
 
-  const loginAsDemo = async (targetRole: UserRole = 'ADMIN'): Promise<{ success: boolean }> => {
-    const demoAccounts: Record<UserRole, UserProfile> = {
-      ADMIN: {
-        id: 'usr-admin',
-        organization_id: DEMO_ORG_ID,
-        full_name: 'Diretor de Suprimentos (Admin)',
-        email: 'admin@saberx.com.br',
-        role: 'ADMIN',
-        position: 'Diretor de Suprimentos & Engenharia',
-        department: 'Diretoria Executiva',
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      COMPRAS: {
-        id: 'usr-compras',
-        organization_id: DEMO_ORG_ID,
-        full_name: 'Comprador Sênior Siderúrgico',
-        email: 'compras@saberx.com.br',
-        role: 'COMPRAS',
-        position: 'Comprador Técnico Pleno',
-        department: 'Suprimentos & Logística',
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      VENDAS: {
-        id: 'usr-vendas',
-        organization_id: DEMO_ORG_ID,
-        full_name: 'Gerente Comercial & Vendas',
-        email: 'vendas@saberx.com.br',
-        role: 'VENDAS',
-        position: 'Executivo de Contas Industriais',
-        department: 'Comercial & Propostas',
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      VISUALIZADOR: {
-        id: 'usr-visualizador',
-        organization_id: DEMO_ORG_ID,
-        full_name: 'Auditor Fiscal / Visualizador',
-        email: 'auditoria@saberx.com.br',
-        role: 'VISUALIZADOR',
-        position: 'Auditor de Custos & Compliance',
-        department: 'Controladoria',
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    };
-
-    const selected = demoAccounts[targetRole] || demoAccounts.ADMIN;
-    localStore.saveUser(selected, '123456');
-    setUser(selected);
-    localStore.setCurrentUser(selected);
-    return { success: true };
+      return {
+        success: false,
+        error: 'Não foi possível obter a URL de autorização do Google OAuth.',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: `Falha na inicialização do Google OAuth: ${err.message || 'Erro de comunicação'}`,
+      };
+    }
   };
 
   const resetPassword = async (email: string): Promise<{ success: boolean; error?: string }> => {
-    if (cloudSync && isSupabaseConfigured()) {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      return { success: false, error: 'Por favor, informe seu endereço de e-mail corporativo.' };
+    }
+
+    // 1. Supabase Auth reset se configurado
+    if (isSupabaseConfigured()) {
       try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin,
+        const { error: sbError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: `${window.location.origin}/`,
         });
-        if (error) return { success: false, error: error.message };
+
+        if (sbError) {
+          return { success: false, error: sbError.message };
+        }
+
+        localStore.logAudit({
+          organization_id: DEMO_ORG_ID,
+          action: 'SOLICITACAO_RECUPERACAO_SENHA',
+          entity: 'auth',
+          entity_id: cleanEmail,
+          reason: `Instruções de recuperação de senha enviadas via e-mail para ${cleanEmail}`,
+        });
+
         return { success: true };
-      } catch {
-        // Fallback
+      } catch (err: any) {
+        return { success: false, error: err.message || 'Falha de comunicação com o servidor.' };
       }
     }
+
+    // 2. Tratamento em modo de persistência local
+    const existingUser = localStore.findUserByEmail(cleanEmail);
+    if (!existingUser) {
+      return {
+        success: false,
+        error: 'Nenhuma conta cadastrada foi localizada para o e-mail informado.',
+      };
+    }
+
+    localStore.logAudit({
+      organization_id: existingUser.organization_id || DEMO_ORG_ID,
+      user_id: existingUser.id,
+      user_name: existingUser.full_name,
+      action: 'SOLICITACAO_RECUPERACAO_SENHA_LOCAL',
+      entity: 'auth',
+      entity_id: existingUser.id,
+      reason: `Solicitação de redefinição de acesso registrada para ${cleanEmail}`,
+    });
+
     return { success: true };
   };
 
   const logout = async (): Promise<void> => {
-    if (cloudSync && isSupabaseConfigured()) {
+    if (isSupabaseConfigured()) {
       await supabase.auth.signOut().catch(() => {});
     }
     localStore.setCurrentUser(null);
@@ -396,7 +460,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStore.saveUser(updated);
       localStore.setCurrentUser(updated);
 
-      if (cloudSync && isSupabaseConfigured()) {
+      if (isSupabaseConfigured()) {
         try {
           await supabase
             .from('profiles')
@@ -415,13 +479,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user: user ? { ...user, role: 'ADMIN' } : null,
         role: 'ADMIN',
         isAuthenticated: !!user,
-        isDemoMode: !cloudSync,
+        isDemoMode: !isSupabaseConfigured(),
         cloudSync,
         setCloudSync,
         login,
         signUp,
         loginWithGoogle,
-        loginAsDemo,
         resetPassword,
         logout,
         switchUserRole,
