@@ -21,6 +21,7 @@ import {
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
+import { GoogleOAuthModal } from '../components/auth/GoogleOAuthModal';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import {
@@ -54,6 +55,7 @@ export const AuthPage: React.FC = () => {
 
   // Modal de Configuração do Supabase
   const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [googleModalOpen, setGoogleModalOpen] = useState(false);
   const [customUrl, setCustomUrl] = useState(() => getSupabaseUrl());
   const [customKey, setCustomKey] = useState(() => getSupabaseAnonKey());
   const [testingConnection, setTestingConnection] = useState(false);
@@ -85,20 +87,9 @@ export const AuthPage: React.FC = () => {
 
   const passwordStrength = evaluatePasswordStrength(password);
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = () => {
     setFormError(null);
-    setGoogleLoading(true);
-    try {
-      const res = await loginWithGoogle();
-      if (!res.success && res.error) {
-        setFormError(res.error);
-        error('Falha no Login Google', res.error);
-      }
-    } catch (err: any) {
-      setFormError(err.message || 'Falha ao autenticar com o Google.');
-    } finally {
-      setGoogleLoading(false);
-    }
+    setGoogleModalOpen(true);
   };
 
   const handleTestConnection = async () => {
@@ -336,20 +327,16 @@ export const AuthPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleGoogleLogin}
-                disabled={googleLoading || loading}
+                disabled={loading}
                 className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-800 hover:border-blue-500/50 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-50"
               >
-                {googleLoading ? (
-                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.68-5.17 3.68-9.09z"/>
-                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.26v3.09C3.26 21.36 7.37 24 12 24z"/>
-                    <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.61H1.26C.46 8.23 0 10.06 0 12s.46 3.77 1.26 5.39l4.01-3.1z"/>
-                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.64 1.26 6.61l4.01 3.1c.95-2.85 3.6-4.96 6.73-4.96z"/>
-                  </svg>
-                )}
-                <span>{googleLoading ? 'Conectando ao Google OAuth...' : 'Continuar com o Google'}</span>
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.68-5.17 3.68-9.09z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.26v3.09C3.26 21.36 7.37 24 12 24z"/>
+                  <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.61H1.26C.46 8.23 0 10.06 0 12s.46 3.77 1.26 5.39l4.01-3.1z"/>
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.64 1.26 6.61l4.01 3.1c.95-2.85 3.6-4.96 6.73-4.96z"/>
+                </svg>
+                <span>Continuar com o Google</span>
               </button>
 
               <div className="relative my-4 flex items-center">
@@ -624,6 +611,12 @@ export const AuthPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Modal Interativo de Autenticação Google Workspace */}
+      <GoogleOAuthModal
+        isOpen={googleModalOpen}
+        onClose={() => setGoogleModalOpen(false)}
+      />
     </div>
   );
 };
