@@ -13,10 +13,14 @@ import {
   EyeOff,
   Sparkles,
   Info,
-  Check
+  Check,
+  Settings2,
+  Database,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import {
@@ -26,10 +30,17 @@ import {
   normalizeEmail,
   formatFriendlyErrorMessage
 } from '../lib/security';
+import {
+  getSupabaseUrl,
+  getSupabaseAnonKey,
+  saveSupabaseConfig,
+  testSupabaseConnection,
+  ConnectionTestResult
+} from '../lib/supabase';
 
 export const AuthPage: React.FC = () => {
   const { login, signUp, resetPassword, loginWithGoogle } = useAuth();
-  const { success, error } = useNotification();
+  const { success, error, info } = useNotification();
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [loading, setLoading] = useState(false);
@@ -40,6 +51,13 @@ export const AuthPage: React.FC = () => {
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+
+  // Modal de Configuração do Supabase
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [customUrl, setCustomUrl] = useState(() => getSupabaseUrl());
+  const [customKey, setCustomKey] = useState(() => getSupabaseAnonKey());
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
 
   // Form fields
   const [email, setEmail] = useState('');
@@ -81,6 +99,36 @@ export const AuthPage: React.FC = () => {
     } finally {
       setGoogleLoading(false);
     }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setTestResult(null);
+    try {
+      const res = await testSupabaseConnection(customUrl, customKey);
+      setTestResult(res);
+      if (res.success) {
+        success('Conexão Supabase OK', res.message);
+      } else {
+        error('Falha no Teste', res.message);
+      }
+    } catch (e: any) {
+      setTestResult({ success: false, message: e.message || 'Erro inesperado' });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleSaveSupabaseConfig = () => {
+    if (!customUrl.trim() || !customKey.trim()) {
+      error('Campos Incompletos', 'Informe tanto a URL quanto a Anon Key do Supabase.');
+      return;
+    }
+    saveSupabaseConfig(customUrl, customKey);
+    success('Configuração Salva!', 'Credenciais do Supabase registradas. Tentando autorização Google...');
+    setConfigModalOpen(false);
+    setFormError(null);
+    handleGoogleLogin();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -241,9 +289,26 @@ export const AuthPage: React.FC = () => {
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-2xl backdrop-blur-md">
           {/* Error Banner */}
           {formError && (
-            <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5 animate-fadeIn">
+            <div className="mb-4 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5 animate-fadeIn">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-              <div className="flex-1 leading-relaxed">{formError}</div>
+              <div className="flex-1 leading-relaxed">
+                <div>{formError}</div>
+                {formError.includes('Google OAuth') && (
+                  <div className="mt-3 pt-2.5 border-t border-rose-500/20 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] text-slate-300">
+                      Configure as chaves do Supabase ou acesse diretamente com e-mail/senha.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setConfigModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] shadow transition-colors"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                      Configurar Supabase / Google OAuth
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -489,6 +554,76 @@ export const AuthPage: React.FC = () => {
           <span>Plataforma Segura · Criptografia AES-256 · TLS 1.3 · ISO 27001</span>
         </div>
       </div>
+
+      {/* Modal Técnico de Configuração do Supabase & Google OAuth */}
+      <Modal
+        isOpen={configModalOpen}
+        onClose={() => setConfigModalOpen(false)}
+        title="Configuração do Supabase & Google OAuth"
+        subtitle="Informe as credenciais do seu projeto para ativar o fluxo oficial OAuth"
+        maxWidth="md"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setConfigModalOpen(false)}>Cancelar</Button>
+            <Button
+              variant="secondary"
+              loading={testingConnection}
+              onClick={handleTestConnection}
+            >
+              Testar Conexão
+            </Button>
+            <Button variant="primary" onClick={handleSaveSupabaseConfig}>
+              Salvar e Conectar
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-xs font-sans">
+          <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-200 text-xs space-y-1">
+            <strong className="text-white block font-bold">Por que esta configuração é necessária?</strong>
+            <p className="text-slate-300 leading-relaxed">
+              Em conformidade com a diretriz <strong>Zero Mocks</strong>, o botão Google agora realiza o redirecionamento OAuth oficial da Google Cloud via Supabase.
+            </p>
+          </div>
+
+          <Input
+            label="Supabase URL (VITE_SUPABASE_URL) *"
+            placeholder="https://seu-projeto.supabase.co"
+            value={customUrl}
+            onChange={(e) => setCustomUrl(e.target.value)}
+            leftIcon={<Database className="w-4 h-4" />}
+          />
+
+          <Input
+            label="Supabase Anon Key (VITE_SUPABASE_ANON_KEY) *"
+            type="password"
+            placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            value={customKey}
+            onChange={(e) => setCustomKey(e.target.value)}
+            leftIcon={<Lock className="w-4 h-4" />}
+          />
+
+          {testResult && (
+            <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+              testResult.success
+                ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+            }`}>
+              {testResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+              <span>{testResult.message}</span>
+            </div>
+          )}
+
+          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1.5">
+            <span className="font-bold text-slate-200 block">Passos para obter suas credenciais:</span>
+            <ol className="list-decimal list-inside space-y-0.5 leading-relaxed">
+              <li>Acesse seu console em <strong className="text-white">supabase.com/dashboard</strong>.</li>
+              <li>Em <strong className="text-white">Project Settings &gt; API</strong>, copie a Project URL e Anon Key.</li>
+              <li>Em <strong className="text-white">Authentication &gt; Providers &gt; Google</strong>, habilite o Google e insira o Client ID/Secret do Google Cloud Console.</li>
+            </ol>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
